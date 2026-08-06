@@ -1,0 +1,439 @@
+import React, { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { request } from "../../helpers/axios_helper";
+import {
+  Box,
+  Typography,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  Divider,
+  CircularProgress,
+  Dialog,
+  DialogContent,
+} from "@mui/material";
+import { Close as CloseIcon } from "@mui/icons-material";
+import { BlockListItem, LoadMoreBlockList } from "../common";
+import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
+
+const parseVendorAddress = (value) => {
+  if (!value) {
+    return { Line1: "", Line2: "", PostalCode: "", City: "" };
+  }
+
+  if (typeof value === "object") {
+    return {
+      Line1: String(value?.Line1 || "").trim(),
+      Line2: String(value?.Line2 || "").trim(),
+      PostalCode: String(value?.PostalCode || "").trim(),
+      City: String(value?.City || "").trim(),
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    return {
+      Line1: String(parsed?.Line1 || "").trim(),
+      Line2: String(parsed?.Line2 || "").trim(),
+      PostalCode: String(parsed?.PostalCode || "").trim(),
+      City: String(parsed?.City || "").trim(),
+    };
+  } catch {
+    return { Line1: "", Line2: "", PostalCode: "", City: "" };
+  }
+};
+
+const formatVendorAddress = (value) => {
+  const addr = parseVendorAddress(value);
+  const lines = [addr.Line1];
+  if (addr.Line2) lines.push(addr.Line2);
+  lines.push(addr.PostalCode);
+  lines.push(addr.City);
+  return lines.filter(Boolean).join("\n");
+};
+
+const PurchaseOrderView = ({ order, onClose }) => {
+  const { t } = useTranslation();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [vendor, setVendor] = useState(null);
+  const [productMap, setProductMap] = useState({});
+  const { shouldUseBlockLayout } = useResponsiveLayout();
+
+  useEffect(() => {
+    // Load vendor details
+    // Load vendor, items and products in parallel
+    setLoading(true);
+    Promise.allSettled([
+      request("GET", `/api/vendors/${order.vendorId}`),
+      request("GET", `/api/purchaseOrderItems/order/${order.orderId}`),
+      request("GET", "/api/products"),
+    ])
+      .then(([vendorRes, itemsRes, productsRes]) => {
+        if (vendorRes.status === "fulfilled") setVendor(vendorRes.value.data);
+        setItems(
+          itemsRes.status === "fulfilled" ? itemsRes.value.data || [] : [],
+        );
+        const pList =
+          productsRes.status === "fulfilled"
+            ? productsRes.value.data || []
+            : [];
+        const map = {};
+        pList.forEach((p) => {
+          map[String(p.productCode)] = p.productName || "";
+        });
+        setProductMap(map);
+      })
+      .finally(() => setLoading(false));
+  }, [order.orderId, order.vendorId]);
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "COMPLETED":
+        return "success";
+      case "PROCESSING":
+        return "primary";
+      case "CANCELLED":
+        return "error";
+      case "NEW":
+        return "info";
+      default:
+        return "default";
+    }
+  };
+
+  const calculateTotal = () => {
+    return items.reduce((sum, item) => {
+      const lineTotal =
+        item.lineTotal !== undefined && item.lineTotal !== null
+          ? item.lineTotal
+          : (item.quantity || 0) * (item.unitPrice || 0);
+      return sum + lineTotal;
+    }, 0);
+  };
+
+  const normalizedItems = useMemo(() => {
+    return items.map((item, index) => {
+      const rawItemType = item.itemType;
+      const normalizedType = rawItemType
+        ? String(rawItemType).trim().toUpperCase()
+        : "";
+
+      let displayItemType = rawItemType || "-";
+      if (normalizedType === "A") {
+        displayItemType = t(
+          "purchaseOrderList.itemTypeOptions.assets",
+          "Assets",
+        );
+      } else if (normalizedType === "I") {
+        displayItemType = t(
+          "purchaseOrderList.itemTypeOptions.inventory",
+          "Inventory",
+        );
+      }
+
+      const lineTotal =
+        item.lineTotal !== undefined && item.lineTotal !== null
+          ? Number(item.lineTotal)
+          : (item.quantity || 0) * (item.unitPrice || 0);
+
+      const productName = productMap[String(item.productCode)] || "";
+      const displayProduct = productName
+        ? `${productName} (${item.productCode})`
+        : item.productCode || "-";
+
+      return {
+        ...item,
+        lineNo: index + 1,
+        displayProduct,
+        displayItemType,
+        displayQuantity: item.quantity,
+        displayUnitPrice: `$${Number(item.unitPrice || 0).toFixed(2)}`,
+        displayLineTotal: `$${lineTotal.toFixed(2)}`,
+      };
+    });
+  }, [items, t, productMap]);
+
+  const itemColumnDefs = useMemo(
+    () => [
+      { field: "lineNo", label: t("purchaseOrderList.lineNo", "#") },
+      {
+        field: "displayProduct",
+        label: t("purchaseOrderList.product", "Product"),
+      },
+      {
+        field: "displayItemType",
+        label: t("purchaseOrderList.itemType", "Item Type"),
+      },
+      {
+        field: "displayQuantity",
+        label: t("purchaseOrderList.quantity", "Quantity"),
+      },
+      {
+        field: "displayUnitPrice",
+        label: t("purchaseOrderList.unitPrice", "Unit Price"),
+      },
+      {
+        field: "displayLineTotal",
+        label: t("purchaseOrderList.lineTotal", "Line Total"),
+      },
+    ],
+    [t],
+  );
+
+  const vendorAddress = useMemo(
+    () => formatVendorAddress(vendor?.address),
+    [vendor?.address],
+  );
+
+  return (
+    <Dialog open={true} onClose={onClose} maxWidth="lg" fullWidth>
+      <DialogContent>
+        <Box sx={{ p: 2 }}>
+          {/* Header */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 3,
+            }}
+          >
+            <Typography variant="h5" fontWeight={600}>
+              {t("purchaseOrderList.viewTitle", "Purchase Order Details")}
+            </Typography>
+            <IconButton onClick={onClose} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Box>
+
+          {/* Order Information */}
+          <Box
+            sx={{
+              backgroundColor: "var(--color-gray-100)",
+              p: 2,
+              borderRadius: 1,
+              mb: 3,
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("purchaseOrderList.orderDetails", "Order Details")}
+            </Typography>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              {/* Order ID and Order Status inline */}
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  {t("purchaseOrderList.orderId", "Order ID")}
+                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography variant="body1" fontWeight={500}>
+                    {order.orderId}
+                  </Typography>
+                  <Chip
+                    label={t(
+                      `purchaseOrderList.status.${order.orderStatus?.toLowerCase()}`,
+                      order.orderStatus,
+                    )}
+                    color={getStatusColor(order.orderStatus)}
+                    size="small"
+                    sx={{ ml: 1 }}
+                  />
+                </Box>
+              </Box>
+
+              {/* Vendor (moved to where order status was) */}
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  {t("purchaseOrderList.vendorId", "Vendor")}
+                </Typography>
+                <Typography variant="body1" fontWeight={500}>
+                  {vendor
+                    ? `${vendor.vendorName} (${vendor.vendorId})`
+                    : order.vendorId}
+                </Typography>
+                {vendorAddress && (
+                  <>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mt: 1 }}
+                    >
+                      {t("vendorList.address", "Address")}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ whiteSpace: "pre-line", lineHeight: 1.35 }}
+                    >
+                      {vendorAddress}
+                    </Typography>
+                  </>
+                )}
+              </Box>
+
+              {/* Order Amount (moved to where vendor was) */}
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  {t("purchaseOrderList.purchaseAmount", "Purchase Amount")}
+                </Typography>
+                <Typography
+                  variant="body1"
+                  fontWeight={600}
+                  color="primary.main"
+                >
+                  ${order.purchaseAmount?.toFixed(2) || "0.00"}
+                </Typography>
+              </Box>
+
+              {/* Order Date (remains in place) */}
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  {t("purchaseOrderList.orderDate", "Order Date")}
+                </Typography>
+                <Typography variant="body1" fontWeight={500}>
+                  {order.orderDate
+                    ? new Date(order.orderDate).toLocaleDateString()
+                    : "N/A"}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+
+          <Divider sx={{ mb: 3 }} />
+
+          {/* Items Section */}
+          <Box>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("purchaseOrderList.items", "Items")}
+            </Typography>
+
+            {loading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : items.length === 0 ? (
+              <Box
+                sx={{
+                  p: 3,
+                  textAlign: "center",
+                  backgroundColor: "var(--color-gray-100)",
+                  borderRadius: 1,
+                }}
+              >
+                <Typography color="text.secondary">
+                  {t("purchaseOrderList.noItems", "No items found")}
+                </Typography>
+              </Box>
+            ) : shouldUseBlockLayout ? (
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 2 }}>
+                <LoadMoreBlockList
+                  items={normalizedItems}
+                  renderItem={(item, index) => (
+                    <BlockListItem
+                      key={item.itemId || index}
+                      columnDefs={itemColumnDefs}
+                      item={item}
+                      enableActions={false}
+                      t={t}
+                    />
+                  )}
+                />
+                <Paper
+                  sx={{
+                    p: 2,
+                    border: "1px solid var(--color-gray-200)",
+                    borderRadius: 1,
+                    backgroundColor: "background.default",
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {t("purchaseOrderList.total", "Total")}
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: "primary.main" }}>
+                    ${calculateTotal().toFixed(2)}
+                  </Typography>
+                </Paper>
+              </Box>
+            ) : (
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: "background.default" }}>
+                      <TableCell>
+                        {t("purchaseOrderList.lineNo", "#")}
+                      </TableCell>
+                      <TableCell sx={{ minWidth: 220 }}>
+                        {t("purchaseOrderList.product", "Product")}
+                      </TableCell>
+                      <TableCell>
+                        {t("purchaseOrderList.itemType", "Item Type")}
+                      </TableCell>
+                      <TableCell align="right">
+                        {t("purchaseOrderList.quantity", "Quantity")}
+                      </TableCell>
+                      <TableCell align="right">
+                        {t("purchaseOrderList.unitPrice", "Unit Price")}
+                      </TableCell>
+                      <TableCell align="right">
+                        {t("purchaseOrderList.lineTotal", "Line Total")}
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {normalizedItems.map((item, index) => (
+                      <TableRow key={item.itemId || index}>
+                        <TableCell>{item.lineNo}</TableCell>
+                        <TableCell sx={{ minWidth: 220 }}>
+                          {item.displayProduct}
+                        </TableCell>
+                        <TableCell>{item.displayItemType}</TableCell>
+                        <TableCell align="right">
+                          {item.displayQuantity}
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.displayUnitPrice}
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.displayLineTotal}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        align="right"
+                        sx={{ fontWeight: "bold", borderTop: 2 }}
+                      >
+                        {t("purchaseOrderList.total", "Total")}:
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{ fontWeight: "bold", borderTop: 2 }}
+                      >
+                        ${calculateTotal().toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PurchaseOrderView;

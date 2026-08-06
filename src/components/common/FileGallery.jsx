@@ -1,0 +1,384 @@
+import React, { useEffect, useState, useRef } from "react";
+import { Box, Typography, IconButton, Button, Stack } from "@mui/material";
+import { useTranslation } from "react-i18next";
+import CloseIcon from "@mui/icons-material/Close";
+import CameraAltIcon from "@mui/icons-material/CameraAlt";
+import {
+  deleteFileFromDrive,
+  FileChip,
+  ThumbnailImg,
+  getActiveStorageProviderConfig,
+  getStorageConfig,
+  ImageCarousel,
+  getDisplayImageInfo,
+  getFileIdFromLink,
+  getFileIcon,
+  normalizeFileMetadata,
+  uploadFileToDrive,
+} from "../../helpers/file_helper";
+
+/**
+ * FileGallery
+ * Props:
+ * - productPicture: string|array - JSON-string or array or single URL describing pictures
+ * - allowRemove: boolean - whether to show remove controls
+ * - repoConfig: object - optional repository connection info (not used by display)
+ * - onChange: function(jsonString) - called whenever the picture list changes
+ */
+const FileGallery = ({
+  productPicture,
+  allowRemove = true,
+  allowAdd = true,
+  repoConfig = null,
+  extraActions = null,
+  onChange = () => {},
+}) => {
+  const [files, setFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const { t } = useTranslation();
+  const [carouselOpen, setCarouselOpen] = useState(false);
+  const [carouselImages, setCarouselImages] = useState([]);
+  const [carouselStart, setCarouselStart] = useState(0);
+  const storageProvider = getStorageConfig().provider;
+
+  const normalizeForStorage = (fileLike, fallback = {}) =>
+    normalizeFileMetadata(fileLike, {
+      provider: storageProvider,
+      uploadedAt: new Date().toISOString(),
+      ...fallback,
+    });
+
+  const emitChange = (nextFiles) => {
+    const normalized = (nextFiles || []).map((f) => normalizeForStorage(f));
+    try {
+      setTimeout(() => {
+        try {
+          onChange(normalized.length > 0 ? JSON.stringify(normalized) : null);
+        } catch (e) {}
+      }, 0);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    try {
+      const pic = productPicture;
+      let parsed = pic;
+      if (typeof pic === "string") {
+        try {
+          parsed = JSON.parse(pic);
+        } catch (e) {
+          parsed = pic;
+        }
+      }
+      const arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+      const norm = arr.filter(Boolean).map((p) => normalizeForStorage(p));
+      setFiles(norm);
+      // parsed incoming prop -> normalized files
+    } catch (err) {
+      setFiles([]);
+    }
+  }, [productPicture]);
+
+  // file input for add action
+  const fileInputRef = useRef(null);
+  // camera capture input
+  const cameraInputRef = useRef(null);
+
+  const handleOpenFileChooser = () => {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.value = "";
+    fileInputRef.current.click();
+  };
+
+  const handleOpenCamera = () => {
+    if (!cameraInputRef.current) return;
+    cameraInputRef.current.value = "";
+    cameraInputRef.current.click();
+  };
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setUploadError("");
+    try {
+      const activeCfg = getActiveStorageProviderConfig();
+      const folderId = activeCfg.folderId;
+      const uploaded = await uploadFileToDrive(file, null, folderId);
+      const newFile = normalizeForStorage(uploaded, {
+        name: file.name,
+        mimeType: file.type || "",
+      });
+      setFiles((prev) => {
+        const next = [...(prev || []), newFile];
+        emitChange(next);
+        return next;
+      });
+    } catch (err) {
+      console.error("Upload failed in FileGallery", err);
+      setUploadError(err?.message || "Upload failed");
+      try {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          const newFile = normalizeForStorage(
+            {
+              id: null,
+              url: dataUrl,
+              viewUrl: dataUrl,
+              name: file.name,
+              mimeType: file.type || "",
+            },
+            {
+              name: file.name,
+              mimeType: file.type || "",
+            },
+          );
+          setFiles((prev) => {
+            const next = [...(prev || []), newFile];
+            emitChange(next);
+            return next;
+          });
+        };
+        reader.readAsDataURL(file);
+      } catch (e) {
+        console.error("Preview fallback failed", e);
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Emit changes to parent only when user actions occur (e.g. remove)
+  // This prevents prop -> state -> emit -> parent set -> prop loop.
+
+  const handleRemove = (idx) => {
+    // remove locally first to keep UI responsive
+    let removed = null;
+    setFiles((prev) => {
+      const next = prev.filter((_, i) => {
+        if (i === idx) return false;
+        return true;
+      });
+      removed = prev[idx];
+      emitChange(next);
+      return next;
+    });
+
+    // attempt background deletion via AI assistant
+    (async () => {
+      try {
+        const fileId = removed?.id || getFileIdFromLink(removed?.url);
+        if (!fileId) return;
+        const resp = await deleteFileFromDrive(fileId, null, removed?.provider);
+        if (resp && !resp.ok) {
+          const text = await resp.text();
+          console.warn("Delete failed:", resp.status, text);
+          setUploadError(t("basic.failed") + ": " + (text || resp.statusText));
+        }
+      } catch (err) {
+        console.error("Error deleting file", err);
+        setUploadError(err?.message || "Delete failed");
+      }
+    })();
+  };
+
+  const buildImages = (filesArr) => {
+    if (!filesArr || filesArr.length === 0) return [];
+    return filesArr
+      .map((f) => getDisplayImageInfo(f.url || f))
+      .filter((info) => info && (info.imageUrl || info.meta?.id))
+      .map((info) => ({
+        displayUrl: info.imageUrl || null,
+        viewUrl: info.meta?.viewUrl || null,
+        title: info.meta?.name || "",
+        provider: info.meta?.provider || null,
+        meta: info.meta || null,
+      }));
+  };
+
+  const openCarousel = (startIndex) => {
+    const imgs = buildImages(files);
+    if (!imgs || imgs.length === 0) return;
+    setCarouselImages(imgs);
+    setCarouselStart(startIndex || 0);
+    setCarouselOpen(true);
+  };
+
+  return (
+    <Box>
+      {/* Upload status and errors */}
+      <Box
+        sx={{
+          mb: 1,
+          display: "flex",
+          gap: 1,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        {isUploading && (
+          <div className="upload-status">
+            {t("staffManagement.uploadingFile")}
+          </div>
+        )}
+        {uploadError && <div className="upload-error">{uploadError}</div>}
+        {allowAdd && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleFileSelected}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={handleFileSelected}
+            />
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                onClick={handleOpenFileChooser}
+                startIcon={<span>＋</span>}
+                disabled={isUploading}
+              >
+                {isUploading
+                  ? t("staffManagement.uploading")
+                  : t("staffManagement.addFile")}
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                onClick={handleOpenCamera}
+                startIcon={<CameraAltIcon fontSize="small" />}
+                disabled={isUploading}
+              >
+                {t("staffManagement.takePhoto")}
+              </Button>
+              {extraActions}
+            </Stack>
+          </>
+        )}
+      </Box>
+
+      <Box
+        sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}
+      >
+        {files && files.length > 0 ? (
+          files.map((f, idx) => {
+            try {
+              return (
+                <Box key={f.id || f.url || idx} sx={{ position: "relative" }}>
+                  <FileChip
+                    file={f}
+                    size={56}
+                    onClick={() => {
+                      openCarousel(idx);
+                    }}
+                    onRemove={allowRemove ? () => handleRemove(idx) : undefined}
+                  />
+                </Box>
+              );
+            } catch (e) {
+              const info = getDisplayImageInfo(f.url || f);
+              const imageUrl = info?.imageUrl || null;
+              const meta = info?.meta || {};
+              return (
+                <Box key={f.id || f.url || idx} sx={{ position: "relative" }}>
+                  {meta?.id ? (
+                    <ThumbnailImg
+                      fileId={meta.id}
+                      viewUrl={meta.viewUrl || ""}
+                      provider={meta.provider || null}
+                      width={56}
+                      height={56}
+                      alt={meta.name || f.name || `img-${idx}`}
+                      style={{ borderRadius: 6, cursor: "pointer" }}
+                      onClick={() => openCarousel(idx)}
+                    />
+                  ) : imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={meta.name || f.name || `img-${idx}`}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => openCarousel(idx)}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {getFileIcon(
+                        meta.mimeType || f.mimeType,
+                        meta.name || f.name,
+                      )}
+                    </Box>
+                  )}
+                  {allowRemove && (
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemove(idx)}
+                      sx={{
+                        position: "absolute",
+                        top: -8,
+                        right: -8,
+                        bgcolor: "background.paper",
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  )}
+                </Box>
+              );
+            }
+          })
+        ) : (
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: "background.paper",
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="body2">📦</Typography>
+          </Box>
+        )}
+      </Box>
+
+      {carouselOpen && (
+        <ImageCarousel
+          images={carouselImages}
+          open={carouselOpen}
+          onClose={() => setCarouselOpen(false)}
+          startIndex={carouselStart}
+        />
+      )}
+    </Box>
+  );
+};
+
+export default FileGallery;
