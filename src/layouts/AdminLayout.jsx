@@ -30,6 +30,8 @@ const AdminLayout = ({ children }) => {
         display: "flex",
         minHeight: "100vh",
         bgcolor: "background.default",
+        backgroundImage:
+          "radial-gradient(circle at 10% -10%, rgba(111, 214, 109, 0.24) 0, rgba(111, 214, 109, 0) 38%), radial-gradient(circle at 96% 4%, rgba(255, 179, 89, 0.2) 0, rgba(255, 179, 89, 0) 30%)",
       }}
     >
       {/* Sidebar */}
@@ -67,9 +69,26 @@ const AdminLayout = ({ children }) => {
             width: "100%",
             maxWidth: "100%",
             mx: "auto",
+            animation: "contentReveal 0.45s ease-out",
+            "@keyframes contentReveal": {
+              from: { opacity: 0, transform: "translateY(8px)" },
+              to: { opacity: 1, transform: "translateY(0)" },
+            },
           }}
         >
-          {children}
+          <Box
+            sx={{
+              minHeight: "calc(100vh - 160px)",
+              borderRadius: 4,
+              border: "1px solid rgba(57, 167, 74, 0.12)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(247,255,249,0.9) 100%)",
+              boxShadow: "0 16px 38px rgba(31, 90, 53, 0.1)",
+              p: { xs: 2, sm: 3 },
+            }}
+          >
+            {children}
+          </Box>
         </Box>
 
         {/* Footer (Optional) */}
@@ -81,7 +100,8 @@ const AdminLayout = ({ children }) => {
             mt: "auto",
             borderTop: "1px solid",
             borderColor: "divider",
-            bgcolor: "background.paper",
+            bgcolor: "rgba(255,255,255,0.78)",
+            backdropFilter: "blur(8px)",
           }}
         >
           <Box
@@ -94,7 +114,8 @@ const AdminLayout = ({ children }) => {
             }}
           >
             <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-              © {new Date().getFullYear()} BMP System. All rights reserved.
+              © {new Date().getFullYear()} Fresh n Freshness. All rights
+              reserved.
             </Box>
             <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
               Version 1.0.0

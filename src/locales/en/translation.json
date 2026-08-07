@@ -1,10 +1,10 @@
 {
   "app": {
-    "name": "BMP System",
+    "name": "Fresh n Freshness",
     "version": "v1.0.0"
   },
   "header": {
-    "title": "Business Management"
+    "title": "Fresh n Freshness"
   },
   "navigation": {
     "login": "Login",
@@ -101,11 +101,11 @@
     "privacy": "Privacy Policy",
     "eulaTitle": "End User License Agreement",
     "privacyTitle": "Privacy Policy",
-    "legalPrefix": "Use of the Business Management Platform is subject to the Company's IT policies. Unauthorized use is prohibited. See",
+    "legalPrefix": "Use of Fresh n Freshness is subject to the Company's IT policies. Unauthorized use is prohibited. See",
     "and": "and",
-    "appTitle": "Business Management Platform",
+    "appTitle": "Fresh n Freshness",
     "appSubtitle": "Secure access for authorised users",
-    "footer": "© {{year}} BMP System. All rights reserved.",
+    "footer": "© {{year}} Fresh n Freshness. All rights reserved.",
     "orSignInWithOtp": "Alternate sign in methods",
     "otpLabel": "One-Time Password (OTP)",
     "signInWithOtp": "Sign in with OTP",

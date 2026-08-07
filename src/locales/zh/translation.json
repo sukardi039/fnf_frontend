@@ -1,10 +1,10 @@
 {
   "app": {
-    "name": "BMP 系统",
+    "name": "鲜又鲜",
     "version": "v1.0.0"
   },
   "header": {
-    "title": "业务管理"
+    "title": "鲜又鲜"
   },
   "navigation": {
     "login": "登录",
@@ -101,11 +101,11 @@
     "privacy": "隐私政策",
     "eulaTitle": "最终用户许可协议",
     "privacyTitle": "隐私政策",
-    "legalPrefix": "使用业务管理平台须遵守本公司的 IT 政策。禁止未经授权的使用。详情见",
+    "legalPrefix": "使用鲜又鲜须遵守本公司的 IT 政策。禁止未经授权的使用。详情见",
     "and": "和",
-    "appTitle": "业务管理平台",
+    "appTitle": "鲜又鲜",
     "appSubtitle": "授权用户的安全访问",
-    "footer": "© {{year}} BMP 系统。保留所有权利。",
+    "footer": "© {{year}} 鲜又鲜。保留所有权利。",
     "orSignInWithOtp": "其他登录方式",
     "otpLabel": "一次性密码（OTP）",
     "signInWithOtp": "使用 OTP 登录",

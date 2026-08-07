@@ -352,7 +352,7 @@ export default function LoginForm({
               <a
                 href={`/eula_${lang}.html`}
                 onClick={(event) =>
-                  openPolicyPopup(event, `/eula_${lang}.html`, "bmp-eula")
+                  openPolicyPopup(event, `/eula_${lang}.html`, "fnf-eula")
                 }
                 rel="noopener noreferrer"
               >
@@ -365,7 +365,7 @@ export default function LoginForm({
                   openPolicyPopup(
                     event,
                     `/privacy_${lang}.html`,
-                    "bmp-privacy-policy",
+                    "fnf-privacy-policy",
                   )
                 }
                 rel="noopener noreferrer"

@@ -595,7 +595,7 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
       >
         {(!collapsed || isMobile) && (
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            {t("app.name", "BMP System")}
+            {t("app.name", "Fresh n Freshness")}
           </Typography>
         )}
         {!isMobile && (

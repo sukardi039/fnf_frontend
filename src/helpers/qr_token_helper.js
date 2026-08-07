@@ -10,7 +10,7 @@
  */
 
 const BASE_SECRET =
-  import.meta.env.VITE_QR_SIGNING_SECRET || "bmp-default-secret-change-me";
+  import.meta.env.VITE_QR_SIGNING_SECRET || "fnf-default-secret-change-me";
 const DEFAULT_MAX_AGE_MINUTES = 30;
 const DATETIME_PATTERN = /^\d{12}$/;
 const LEGACY_DATETIME_PATTERN = /^\d{10}$/;

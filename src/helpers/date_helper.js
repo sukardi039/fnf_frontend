@@ -2,7 +2,7 @@
  * Returns a local-time ISO datetime string: "YYYY-MM-DDTHH:mm:ss"
  * without a UTC "Z" suffix, preserving the user's local timezone.
  *
- * Use instead of new Date().toISOString() for all BMP business dates.
+ * Use instead of new Date().toISOString() for all business dates.
  */
 export const toLocalISO = (date = new Date()) => {
   const d = date instanceof Date ? date : new Date(date);
