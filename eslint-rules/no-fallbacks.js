@@ -24,6 +24,7 @@ const noFallbacks = {
     const filename = String(context.getFilename() || "");
     const allowedPatterns = [
       /src[\\/]components[\\/]baseInformation[\\/]/,
+      /src[\\/]components[\\/]catalog[\\/]/,
       /src[\\/]components[\\/]information[\\/]/,
       /src[\\/]components[\\/]stock[\\/]ProductDialog\.(js|jsx)$/,
       /src[\\/]components[\\/]stock[\\/]UOMHierarchy\.(js|jsx)$/,

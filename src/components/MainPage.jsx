@@ -16,6 +16,16 @@ import UserLoginList from "./baseInformation/UserLoginList";
 import ForcedPassword from "./baseInformation/ForcedPassword";
 import QrGenerator from "./baseInformation/QrGenerator";
 import ParameterModern from "./baseInformation/ParameterModern";
+import WASimulator from "./baseInformation/WASimulator";
+import ProductCatalog from "./catalog/ProductCatalog";
+import PriceRuleForm from "./catalog/PriceRuleForm";
+import SkuLabelGenerator from "./catalog/SkuLabelGenerator";
+import PurchaseLotReceive from "./inventory/PurchaseLotReceive";
+import LossEventForm from "./inventory/LossEventForm";
+import StaffCheckout from "./checkout/StaffCheckout";
+import RefundRequestForm from "./checkout/RefundRequestForm";
+import RefundApprovalForm from "./checkout/RefundApprovalForm";
+import TransformationRecipeForm from "./transformation/TransformationRecipeForm";
 
 function MainPage() {
   return (
@@ -37,6 +47,25 @@ function MainPage() {
         <Route path="/about/privacy" element={<PrivacyPage />} />
         <Route path="/qr-generator" element={<QrGenerator />} />
         <Route path="/parameter" element={<ParameterModern />} />
+        <Route path="/wa-simulator" element={<WASimulator />} />
+        <Route path="/product" element={<ProductCatalog />} />
+        <Route path="/price-rules/new" element={<PriceRuleForm />} />
+        <Route path="/catalog/labels" element={<SkuLabelGenerator />} />
+        <Route
+          path="/inventory/lots/receive"
+          element={<PurchaseLotReceive />}
+        />
+        <Route path="/inventory/loss-events/new" element={<LossEventForm />} />
+        <Route path="/checkout/staff" element={<StaffCheckout />} />
+        <Route path="/checkout/refunds/new" element={<RefundRequestForm />} />
+        <Route
+          path="/checkout/refunds/approve"
+          element={<RefundApprovalForm />}
+        />
+        <Route
+          path="/transformations/recipes/new"
+          element={<TransformationRecipeForm />}
+        />
       </Routes>
     </AdminLayout>
   );

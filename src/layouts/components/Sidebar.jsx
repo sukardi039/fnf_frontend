@@ -46,6 +46,9 @@ import {
   QrCode2 as QrCode2Icon,
   Tune as TuneIcon,
   WhatsApp as WhatsAppIcon,
+  Percent as PercentIcon,
+  ShoppingCart as ShoppingCartIcon,
+  Undo as RefundIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -193,6 +196,20 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               path: "/operations/tv-mobile-approval",
               minLevel: 1,
             },
+          ].filter(Boolean),
+        },
+        {
+          key: "BusinessAdmin",
+          menu: ["BusinessAdmin", "BusinessSetup"],
+          label: t("menu.businessAdmin", "Business Admin"),
+          icon: <AdminPanelSettingsIcon />,
+          children: [
+            {
+              key: "staff",
+              label: t("menu.staff", "Staff"),
+              icon: <PeopleIcon fontSize="small" />,
+              path: "/staff",
+            },
             canAccessWaSimulator
               ? {
                   key: "waSimulator",
@@ -202,6 +219,32 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
                 }
               : null,
           ].filter(Boolean),
+        },
+        {
+          key: "Catalog",
+          menu: null,
+          label: t("menu.catalog", "Catalog"),
+          icon: <BundleIcon />,
+          children: [
+            {
+              key: "products",
+              label: t("menu.productList", "Products"),
+              icon: <StoreIcon fontSize="small" />,
+              path: "/product",
+            },
+            {
+              key: "priceRules",
+              label: t("menu.priceRules"),
+              icon: <PercentIcon fontSize="small" />,
+              path: "/price-rules/new",
+            },
+            {
+              key: "skuLabels",
+              label: t("menu.skuLabels"),
+              icon: <QrCode2Icon fontSize="small" />,
+              path: "/catalog/labels",
+            },
+          ],
         },
         {
           key: "Information",
@@ -231,18 +274,6 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               label: t("menu.vehicle", "Vehicles"),
               icon: <CarIcon fontSize="small" />,
               path: "/vehicle",
-            },
-            {
-              key: "staff",
-              label: t("menu.staff", "Staff"),
-              icon: <PeopleIcon fontSize="small" />,
-              path: "/staff",
-            },
-            {
-              key: "products",
-              label: t("menu.productList", "Products"),
-              icon: <StoreIcon fontSize="small" />,
-              path: "/product",
             },
             {
               key: "library",
@@ -284,6 +315,18 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
           label: t("menu.inventory", "Inventory"),
           icon: <StoreIcon />,
           children: [
+            {
+              key: "purchaseLotReceive",
+              label: t("menu.purchaseLotReceive"),
+              icon: <WarehouseIcon fontSize="small" />,
+              path: "/inventory/lots/receive",
+            },
+            {
+              key: "lossEvent",
+              label: t("menu.lossEvent"),
+              icon: <CompareArrowsIcon fontSize="small" />,
+              path: "/inventory/loss-events/new",
+            },
             isParamEnabled("stockTakeOn")
               ? {
                   key: "stockTakeOn",
@@ -333,6 +376,26 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               path: "/stockcard",
             },
           ].filter(Boolean),
+        },
+        {
+          key: "Checkout",
+          menu: null,
+          label: t("menu.checkout"),
+          icon: <ShoppingCartIcon />,
+          children: [
+            {
+              key: "staffCheckout",
+              label: t("menu.staffCheckout"),
+              icon: <ShoppingCartIcon fontSize="small" />,
+              path: "/checkout/staff",
+            },
+            {
+              key: "refundRequest",
+              label: t("menu.refundRequest"),
+              icon: <RefundIcon fontSize="small" />,
+              path: "/checkout/refunds/new",
+            },
+          ],
         },
         {
           key: "ProjectManagement",
@@ -494,6 +557,14 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
         "/userRole",
         "/userlogin",
         "/forced-password",
+        "/wa-simulator",
+        "/product",
+        "/price-rules/new",
+        "/catalog/labels",
+        "/inventory/lots/receive",
+        "/inventory/loss-events/new",
+        "/checkout/staff",
+        "/checkout/refunds/new",
         "/parameter",
         "/language-settings",
         "/settings",

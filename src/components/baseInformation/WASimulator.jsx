@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useContext } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Avatar,
   Box,
@@ -34,7 +34,6 @@ const isActiveStaff = (value) => {
   const normalized = String(value ?? "")
     .trim()
     .toLowerCase();
-
   if (!normalized) return false;
 
   const falseValues = new Set([
@@ -51,19 +50,6 @@ const isActiveStaff = (value) => {
   ]);
   if (falseValues.has(normalized)) return false;
 
-  const trueValues = new Set([
-    "true",
-    "1",
-    "yes",
-    "y",
-    "active",
-    "a",
-    "enabled",
-    "on",
-    "t",
-  ]);
-  if (trueValues.has(normalized)) return true;
-
   return true;
 };
 
@@ -76,7 +62,6 @@ const WASimulator = () => {
   const { t } = useTranslation();
   const { userInfo } = useContext(AuthContext);
   const scrollEndRef = useRef(null);
-
   const userLevel = userInfo?.userLevel || userInfo?.level || 0;
   const isUserLevelNine = userLevel === 9 || userLevel === "9";
   const userCompanyId = userInfo?.companyId || "";
@@ -96,24 +81,24 @@ const WASimulator = () => {
   ]);
 
   useEffect(() => {
-    setLoadingStaff(true);
     request("GET", "/api/staffs")
       .then((response) => {
-        const allStaff = Array.isArray(response.data)
-          ? response.data
-          : response.data?.items || [];
+        const allStaff = Array.isArray(response.data) ? response.data : [];
         const filteredStaff = isUserLevelNine
           ? allStaff
           : allStaff.filter(
               (staff) => String(staff.companyId) === String(userCompanyId),
             );
-        const sortedStaff = filteredStaff
-          .filter((staff) => isActiveStaff(staff.active))
-          .filter((staff) => String(staff.mobileNumber || "").trim())
-          .sort((a, b) =>
-            String(a.staffName || "").localeCompare(String(b.staffName || "")),
-          );
-        setStaffList(sortedStaff);
+        setStaffList(
+          filteredStaff
+            .filter((staff) => isActiveStaff(staff.active))
+            .filter((staff) => String(staff.mobileNumber || "").trim())
+            .sort((first, second) =>
+              String(first.staffName || "").localeCompare(
+                String(second.staffName || ""),
+              ),
+            ),
+        );
       })
       .catch(() => setStaffList([]))
       .finally(() => setLoadingStaff(false));
@@ -129,7 +114,7 @@ const WASimulator = () => {
   );
 
   const appendMessages = (...newMessages) => {
-    setMessages((prev) => [...prev, ...newMessages.map(createMessage)]);
+    setMessages((current) => [...current, ...newMessages.map(createMessage)]);
   };
 
   const resetConversation = () => {
@@ -152,7 +137,6 @@ const WASimulator = () => {
   const handleSend = async () => {
     const trimmedMessage = message.trim();
     const normalizedMessage = trimmedMessage.toLowerCase();
-
     if (!trimmedMessage || sending) return;
 
     appendMessages({ role: "user", type: "text", text: trimmedMessage });
@@ -176,32 +160,25 @@ const WASimulator = () => {
       return;
     }
 
-    if (!selectedStaff.mobileNumber) {
-      appendMessages({
-        role: "system",
-        type: "text",
-        text: t("waSimulator.noMobileNumber"),
-      });
-      return;
-    }
-
     setSending(true);
-
     try {
-      const response = await request("POST", "/api/mobile-logins/request", {
-        mobileNumber: selectedStaff.mobileNumber,
-      });
-
-      const loginKey =
-        response?.data?.loginkey || response?.data?.loginKey || "";
-      const otp = response?.data?.otp || response?.data?.OTP || "";
+      const response = await request(
+        "POST",
+        "/api/mobile-logins/request",
+        { mobileNumber: selectedStaff.mobileNumber },
+        {
+          skipAuthRedirect: true,
+          skipBackendErrorDialog: true,
+        },
+      );
+      const loginKey = response.data.loginkey;
 
       if (normalizedMessage === "otp") {
         appendMessages({
           role: "system",
           type: "text",
           label: t("waSimulator.otpLabel"),
-          text: otp || t("waSimulator.missingResponse"),
+          text: response.data.otp,
         });
         return;
       }
@@ -216,7 +193,6 @@ const WASimulator = () => {
       }
 
       const loginUrl = buildLoginUrl(loginKey);
-
       if (normalizedMessage === "web") {
         appendMessages({
           role: "system",
@@ -237,10 +213,7 @@ const WASimulator = () => {
       appendMessages({
         role: "system",
         type: "text",
-        text:
-          error?.response?.data?.message ||
-          error?.message ||
-          t("waSimulator.requestFailed"),
+        text: error?.response?.data?.message || t("waSimulator.requestFailed"),
       });
     } finally {
       setSending(false);
@@ -262,7 +235,6 @@ const WASimulator = () => {
         icon={WhatsAppIcon}
         onHelpClick={() => setHelpOpen(true)}
       />
-
       <HelpDialog
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
@@ -276,8 +248,8 @@ const WASimulator = () => {
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          borderRadius: 3,
-          backgroundColor: "background.paper",
+          borderRadius: 1,
+          bgcolor: "background.paper",
           boxShadow: 2,
         }}
       >
@@ -305,14 +277,11 @@ const WASimulator = () => {
               </Typography>
             </Box>
           </Stack>
-
           <Chip
             label={
               loadingStaff
                 ? t("waSimulator.loadingStaff")
-                : t("waSimulator.staffCount", "{{count}} staff", {
-                    count: staffList.length,
-                  })
+                : t("waSimulator.staffCount", { count: staffList.length })
             }
             size="small"
             variant="outlined"
@@ -345,7 +314,7 @@ const WASimulator = () => {
                   maxWidth: { xs: "92%", sm: "78%" },
                   px: 1.5,
                   py: 1.25,
-                  borderRadius: 2,
+                  borderRadius: 1,
                   bgcolor:
                     entry.role === "user" ? "primary.main" : "background.paper",
                   color:
@@ -366,23 +335,18 @@ const WASimulator = () => {
                     {entry.label}
                   </Typography>
                 )}
-
                 {entry.type === "qr" ? (
                   <Stack spacing={1.25} alignItems="center">
                     <Box
                       sx={{
                         p: 1.5,
                         bgcolor: "background.paper",
-                        borderRadius: 2,
+                        borderRadius: 1,
                         border: "1px solid",
                         borderColor: "divider",
                       }}
                     >
-                      <QRCodeSVG
-                        value={entry.qrValue || entry.text}
-                        size={168}
-                        level="M"
-                      />
+                      <QRCodeSVG value={entry.qrValue} size={168} level="M" />
                     </Box>
                     <Typography
                       variant="body2"
@@ -406,7 +370,6 @@ const WASimulator = () => {
         </Box>
 
         <Divider />
-
         <Box
           sx={{
             p: 2,
@@ -431,13 +394,11 @@ const WASimulator = () => {
               </MenuItem>
               {staffList.map((staff) => (
                 <MenuItem key={staff.staffId} value={String(staff.staffId)}>
-                  {staff.staffName}
-                  {staff.mobileNumber ? ` · ${staff.mobileNumber}` : ""}
+                  {staff.staffName} · {staff.mobileNumber}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
-
           <TextField
             fullWidth
             size="small"
@@ -448,7 +409,6 @@ const WASimulator = () => {
             onKeyDown={handleKeyDown}
             disabled={sending}
           />
-
           <Button
             variant="contained"
             startIcon={
@@ -464,7 +424,6 @@ const WASimulator = () => {
           >
             {t("waSimulator.sendButton")}
           </Button>
-
           <Button
             variant="outlined"
             startIcon={<ReplayIcon />}

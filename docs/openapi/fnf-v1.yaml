@@ -36,6 +36,136 @@ paths:
                 $ref: "#/components/schemas/LoginResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/pda/exchange:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: exchangePdaChallenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PdaLoginExchangeRequest"
+      responses:
+        "200":
+          description: Staff-scoped PDA session issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffSessionResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/pda/session/refresh:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: refreshPdaSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PdaSessionRefreshRequest" }
+      responses:
+        "200":
+          description: PDA access token renewed and refresh token rotated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffSessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/pda/session/logout:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: logoutPdaSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PdaSessionRefreshRequest" }
+      responses:
+        "204": { description: PDA renewable session revoked }
+  /pda-devices:
+    post:
+      tags: [Authentication]
+      operationId: registerPdaDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PdaDeviceRegistrationRequest" }
+      responses:
+        "201":
+          description: PDA device registered and bound to staff/store
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PdaDeviceResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /auth/customers/register:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: registerCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerRegistrationRequest" }
+      responses:
+        "201":
+          description: Customer account created
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshSessionCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerSessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /auth/customers/login:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: loginCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerLoginRequest" }
+      responses:
+        "200":
+          description: Customer authenticated; the renewable session is set in an HttpOnly cookie
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshSessionCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerSessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/session/refresh:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: refreshSession
+      responses:
+        "200":
+          description: Access token renewed and refresh token rotated
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshSessionCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerSessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/session/logout:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: logoutSession
+      responses:
+        "204":
+          description: Renewable session revoked and cookie cleared
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/ClearedRefreshSessionCookie" }
   /products:
     get:
       tags: [Catalog]
@@ -85,6 +215,81 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /price-rules/{ruleId}/publish:
+    post:
+      tags: [Catalog]
+      operationId: publishPriceRule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Price rule published after conflict validation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRuleResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /labels:
+    post:
+      tags: [Catalog]
+      operationId: generateSkuLabel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LabelGenerationRequest" }
+      responses:
+        "201":
+          description: Printable label reference generated for an active SKU
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LabelResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /labels/{labelRef}:
+    get:
+      tags: [Catalog]
+      security: []
+      operationId: resolveSkuLabel
+      parameters:
+        - name: labelRef
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Active product metadata resolved from an opaque label reference
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+  /labels/{labelRef}/download:
+    get:
+      tags: [Catalog]
+      security: []
+      operationId: downloadSkuLabel
+      parameters:
+        - name: labelRef
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Rendered printable label
+          content:
+            image/png:
+              schema: { type: string, contentEncoding: binary }
+            application/pdf:
+              schema: { type: string, contentEncoding: binary }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
   /lots/receive:
     post:
       tags: [Inventory]
@@ -206,6 +411,14 @@ paths:
       operationId: processPaymentWebhook
       parameters:
         - $ref: "#/components/parameters/TransactionId"
+        - name: X-Payment-Signature
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: X-Payment-Event-Id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
       requestBody:
         required: true
         content:
@@ -218,12 +431,61 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [transactionId, state]
+                required: [transactionId, state, paymentStatus]
                 properties:
                   transactionId: { $ref: "#/components/schemas/Identifier" }
                   state: { $ref: "#/components/schemas/TransactionState" }
+                  paymentStatus: { type: string, enum: [PENDING, SUCCESS, FAILED, REFUNDED] }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /refunds:
+    post:
+      tags: [Checkout]
+      operationId: requestRefund
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundRequest" }
+      responses:
+        "201":
+          description: Refund request recorded and pending approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RefundResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /refunds/{refundId}/approve:
+    post:
+      tags: [Checkout]
+      operationId: approveRefund
+      parameters:
+        - name: refundId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundApprovalRequest" }
+      responses:
+        "200":
+          description: Refund approved and provider flow started or completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RefundResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
   /pda/scan/resolve:
     post:
       tags: [PDA]
@@ -241,6 +503,21 @@ paths:
               schema: { $ref: "#/components/schemas/PdaScanResponse" }
         "410": { $ref: "#/components/responses/Gone" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /transactions/{transactionId}/collection-token:
+    post:
+      tags: [PDA]
+      operationId: issueCollectionToken
+      parameters:
+        - $ref: "#/components/parameters/TransactionId"
+      responses:
+        "200":
+          description: Short-lived collection token for the authenticated transaction owner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionTokenResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /pda/transactions/{transactionId}/handover:
     post:
       tags: [PDA]
@@ -261,6 +538,42 @@ paths:
               schema: { $ref: "#/components/schemas/HandoverResponse" }
         "409": { $ref: "#/components/responses/Conflict" }
         "410": { $ref: "#/components/responses/Gone" }
+  /transformation-recipes:
+    post:
+      tags: [Transformation]
+      operationId: createTransformationRecipe
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransformationRecipeRequest" }
+      responses:
+        "201":
+          description: Versioned transformation recipe created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransformationRecipeResponse" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /transformation-recipes/{recipeId}/activate:
+    post:
+      tags: [Transformation]
+      operationId: activateTransformationRecipe
+      parameters:
+        - name: recipeId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Recipe activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransformationRecipeResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /transformations:
     post:
       tags: [Transformation]
@@ -274,12 +587,36 @@ paths:
             schema: { $ref: "#/components/schemas/TransformationRequest" }
       responses:
         "201":
-          description: Transformation posted atomically
+          description: Transformation posted atomically or held for independent approval
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TransformationResponse" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /transformations/{transformationId}/approve:
+    post:
+      tags: [Transformation]
+      operationId: approveTransformation
+      parameters:
+        - name: transformationId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransformationApprovalRequest" }
+      responses:
+        "200":
+          description: Pending transformation approved and posted atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransformationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /reports/daily-summary:
     get:
       tags: [Reporting]
@@ -300,7 +637,86 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DailySummary" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /reconciliations:
+    post:
+      tags: [Reporting]
+      operationId: submitReconciliation
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconciliationRequest" }
+      responses:
+        "201":
+          description: Reconciliation submitted with authoritative expected quantities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconciliationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /reconciliations/{reconciliationId}/finalize:
+    post:
+      tags: [Reporting]
+      operationId: finalizeReconciliation
+      parameters:
+        - name: reconciliationId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconciliationDecisionRequest" }
+      responses:
+        "200":
+          description: Reconciliation finalized and locked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconciliationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /reconciliations/{reconciliationId}/reopen:
+    post:
+      tags: [Reporting]
+      operationId: reopenReconciliation
+      parameters:
+        - name: reconciliationId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconciliationDecisionRequest" }
+      responses:
+        "200":
+          description: Finalized reconciliation reopened for resubmission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconciliationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 components:
+  headers:
+    RefreshSessionCookie:
+      description: Secure renewable session cookie; HttpOnly, SameSite=Lax, Path=/api/v1/auth/session
+      schema:
+        type: string
+        example: FnF-Refresh-Token=opaque-token; Path=/api/v1/auth/session; HttpOnly; Secure; SameSite=Lax
+    ClearedRefreshSessionCookie:
+      description: Expired renewable session cookie
+      schema:
+        type: string
+        example: FnF-Refresh-Token=; Path=/api/v1/auth/session; Max-Age=0; HttpOnly; Secure; SameSite=Lax
   securitySchemes:
     bearerAuth:
       type: http
@@ -342,6 +758,9 @@ components:
     ProductFormat:
       type: string
       enum: [WHOLE, CUT, JUICE]
+    PrincipalType:
+      type: string
+      enum: [SYSTEM_USER, STAFF, CUSTOMER, TV]
     Channel:
       type: string
       enum: [STORE_SELF_SELECT, STAFF_ASSISTED, MOBILE_ORDER]
@@ -355,6 +774,72 @@ components:
       properties:
         username: { type: string, minLength: 1, maxLength: 100 }
         password: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    PdaLoginExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [loginKey, deviceId]
+      properties:
+        loginKey: { type: string, minLength: 1, maxLength: 128 }
+        deviceId: { $ref: "#/components/schemas/Identifier" }
+    CustomerRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        email: { type: string, format: email, maxLength: 320 }
+        mobileNumber: { type: string, maxLength: 30 }
+        password: { type: string, minLength: 8, maxLength: 200, writeOnly: true }
+    CustomerLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 1, maxLength: 200, writeOnly: true }
+    CustomerSessionResponse:
+      type: object
+      required: [token, principalType, customerId, name, email]
+      properties:
+        token: { type: string, writeOnly: true }
+        principalType: { type: string, const: CUSTOMER }
+        customerId: { $ref: "#/components/schemas/Identifier" }
+        name: { type: string }
+        email: { type: string, format: email }
+    StaffSessionResponse:
+      type: object
+      required: [token, refreshToken, principalType, staffId, deviceId, companyId, storeId]
+      properties:
+        token: { type: string, writeOnly: true }
+        refreshToken: { type: string, writeOnly: true }
+        principalType: { type: string, const: STAFF }
+        staffId: { $ref: "#/components/schemas/Identifier" }
+        deviceId: { $ref: "#/components/schemas/Identifier" }
+        companyId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+    PdaSessionRefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 32, maxLength: 200, writeOnly: true }
+    PdaDeviceRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceId, staffId, storeId]
+      properties:
+        deviceId: { $ref: "#/components/schemas/Identifier" }
+        staffId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+    PdaDeviceResponse:
+      type: object
+      required: [deviceId, staffId, companyId, storeId, active]
+      properties:
+        deviceId: { $ref: "#/components/schemas/Identifier" }
+        staffId: { $ref: "#/components/schemas/Identifier" }
+        companyId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        active: { type: boolean }
     LoginResponse:
       type: object
       required: [token, expiresAt, user]
@@ -363,22 +848,41 @@ components:
         expiresAt: { type: string, format: date-time }
         user:
           type: object
-          required: [id, name, role]
+          required: [id, name, role, principalType]
           properties:
             id: { $ref: "#/components/schemas/Identifier" }
             name: { type: string }
             role: { type: string }
+            principalType: { $ref: "#/components/schemas/PrincipalType" }
     Product:
       type: object
-      required: [productId, productName, format, uom, price, currency, active]
+      required: [productId, skuId, productCode, productName, format, uom, price, currency, active]
       properties:
         productId: { $ref: "#/components/schemas/Identifier" }
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        productCode: { type: string, minLength: 1, maxLength: 100 }
         productName: { type: string, minLength: 1, maxLength: 200 }
         format: { $ref: "#/components/schemas/ProductFormat" }
         uom: { type: string, minLength: 1, maxLength: 20 }
         price: { $ref: "#/components/schemas/Money" }
         currency: { type: string, pattern: "^[A-Z]{3}$" }
         active: { type: boolean }
+    LabelGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [skuId, outputFormat]
+      properties:
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        outputFormat: { type: string, enum: [PNG, PDF] }
+    LabelResponse:
+      type: object
+      required: [labelRef, skuId, qrPayload, outputFormat, downloadUrl]
+      properties:
+        labelRef: { $ref: "#/components/schemas/Identifier" }
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        qrPayload: { type: string, minLength: 1 }
+        outputFormat: { type: string, enum: [PNG, PDF] }
+        downloadUrl: { type: string, format: uri-reference }
     PriceRuleRequest:
       type: object
       additionalProperties: false
@@ -391,17 +895,26 @@ components:
         startAt: { type: string, format: date-time }
         endAt: { type: string, format: date-time }
         priority: { type: integer, minimum: 0 }
+    PriceRuleResponse:
+      type: object
+      required: [ruleId, status]
+      properties:
+        ruleId: { $ref: "#/components/schemas/Identifier" }
+        status: { type: string, enum: [DRAFT, ACTIVE] }
     LotReceiveRequest:
       type: object
       additionalProperties: false
-      required: [supplierId, productId, quantity, uom, totalCost, receivedAt]
+      required: [storeId, supplierId, skuId, quantity, uom, totalCost, receivedAt]
       properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
         supplierId: { $ref: "#/components/schemas/Identifier" }
-        productId: { $ref: "#/components/schemas/Identifier" }
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        supplierLotRef: { type: string, maxLength: 100 }
         quantity: { type: number, exclusiveMinimum: 0 }
         uom: { type: string }
         totalCost: { $ref: "#/components/schemas/Money" }
         receivedAt: { type: string, format: date-time }
+        expiryDate: { type: string, format: date }
     LossEventRequest:
       type: object
       additionalProperties: false
@@ -416,8 +929,9 @@ components:
     CartCreateRequest:
       type: object
       additionalProperties: false
-      required: [channel]
+      required: [storeId, channel]
       properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
         channel: { $ref: "#/components/schemas/Channel" }
         customerId:
           oneOf:
@@ -432,13 +946,15 @@ components:
         quantity: { type: number, exclusiveMinimum: 0 }
     CartTotals:
       type: object
-      required: [cartId, subtotal, discount, total, currency]
+      required: [cartId, quoteId, subtotal, discount, total, currency, expiresAt]
       properties:
         cartId: { $ref: "#/components/schemas/Identifier" }
+        quoteId: { $ref: "#/components/schemas/Identifier" }
         subtotal: { $ref: "#/components/schemas/Money" }
         discount: { $ref: "#/components/schemas/Money" }
         total: { $ref: "#/components/schemas/Money" }
         currency: { type: string, pattern: "^[A-Z]{3}$" }
+        expiresAt: { type: string, format: date-time }
     CheckoutRequest:
       type: object
       additionalProperties: false
@@ -464,12 +980,46 @@ components:
     PaymentWebhookRequest:
       type: object
       additionalProperties: false
-      required: [providerRef, status]
+      required: [providerRef, status, eventId]
       properties:
+        eventId: { type: string, minLength: 1, maxLength: 200 }
         providerRef: { type: string }
         status: { type: string, enum: [SUCCESS, FAILED, CANCELLED, REFUNDED] }
         paidAmount: { $ref: "#/components/schemas/Money" }
         paidAt: { type: string, format: date-time }
+    RefundRequest:
+      type: object
+      additionalProperties: false
+      required: [transactionId, reason]
+      properties:
+        transactionId: { $ref: "#/components/schemas/Identifier" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    RefundApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [approvalNote]
+      properties:
+        approvalNote: { type: string, minLength: 1, maxLength: 500 }
+        returnInspectionRef: { type: string, maxLength: 120 }
+    RefundResponse:
+      type: object
+      required: [refundId, transactionId, paymentId, status, requestedBy, createdAt]
+      properties:
+        refundId: { $ref: "#/components/schemas/Identifier" }
+        transactionId: { $ref: "#/components/schemas/Identifier" }
+        paymentId: { $ref: "#/components/schemas/Identifier" }
+        status: { type: string, enum: [REQUESTED, APPROVED, PROVIDER_PENDING, COMPLETED, REJECTED] }
+        reason: { type: string }
+        requestedBy: { $ref: "#/components/schemas/Identifier" }
+        approvedBy:
+          oneOf:
+            - { $ref: "#/components/schemas/Identifier" }
+            - { type: "null" }
+        providerRef:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
     PdaScanRequest:
       type: object
       additionalProperties: false
@@ -477,6 +1027,14 @@ components:
       properties:
         qrToken: { type: string, minLength: 1, maxLength: 2048 }
         deviceId: { $ref: "#/components/schemas/Identifier" }
+    CollectionTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [transactionId, qrToken, expiresAt]
+      properties:
+        transactionId: { $ref: "#/components/schemas/Identifier" }
+        qrToken: { type: string, minLength: 1, maxLength: 2048 }
+        expiresAt: { type: string, format: date-time }
     PdaScanResponse:
       type: object
       required: [transactionId, state, paymentStatus, handoverEligible, summary]
@@ -516,12 +1074,53 @@ components:
         skuId: { $ref: "#/components/schemas/Identifier" }
         quantity: { type: number, exclusiveMinimum: 0 }
         uom: { type: string }
+    TransformationRecipeOutput:
+      type: object
+      additionalProperties: false
+      required: [skuId, allocationWeight, yieldConversionFactor]
+      properties:
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        allocationWeight: { type: number, exclusiveMinimum: 0, maximum: 1 }
+        yieldConversionFactor: { type: number, exclusiveMinimum: 0 }
+    TransformationRecipeRequest:
+      type: object
+      additionalProperties: false
+      required: [companyId, recipeName, revision, type, inputUom, inputSkuIds, outputs,
+        expectedYieldMin, expectedYieldMax, expectedWasteMin, expectedWasteMax]
+      properties:
+        companyId: { $ref: "#/components/schemas/Identifier" }
+        recipeName: { type: string, minLength: 1, maxLength: 200 }
+        revision: { type: integer, minimum: 1 }
+        type: { type: string, enum: [WHOLE_TO_CUT, WHOLE_TO_JUICE] }
+        inputUom: { type: string }
+        inputSkuIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Identifier" }
+        outputs:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/TransformationRecipeOutput" }
+        expectedYieldMin: { type: number, minimum: 0, maximum: 1 }
+        expectedYieldMax: { type: number, minimum: 0, maximum: 1 }
+        expectedWasteMin: { type: number, minimum: 0, maximum: 1 }
+        expectedWasteMax: { type: number, minimum: 0, maximum: 1 }
+    TransformationRecipeResponse:
+      type: object
+      required: [recipeId, recipeName, revision, status]
+      properties:
+        recipeId: { $ref: "#/components/schemas/Identifier" }
+        recipeName: { type: string }
+        revision: { type: integer }
+        status: { type: string, enum: [DRAFT, ACTIVE, RETIRED] }
     TransformationRequest:
       type: object
       additionalProperties: false
-      required: [type, inputs, outputs]
+      required: [recipeId, storeId, inputs, outputs]
       properties:
-        type: { type: string, enum: [WHOLE_TO_CUT, WHOLE_TO_JUICE] }
+        recipeId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
         inputs:
           type: array
           minItems: 1
@@ -534,16 +1133,34 @@ components:
           minItems: 1
           items: { $ref: "#/components/schemas/TransformationLine" }
         note: { type: string, maxLength: 500 }
+    TransformationApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TransformationOutputResult:
+      type: object
+      required: [skuId, quantity, unitCost]
+      properties:
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unitCost: { $ref: "#/components/schemas/Money" }
     TransformationResponse:
       type: object
-      required: [transformationId, yieldPercent, outputUnitCost]
+      required: [transformationId, status, yieldPercent, wasteQuantity, outputs]
       properties:
         transformationId: { $ref: "#/components/schemas/Identifier" }
+        status: { type: string, enum: [PENDING_APPROVAL, POSTED] }
         yieldPercent: { type: number, minimum: 0 }
-        outputUnitCost: { $ref: "#/components/schemas/Money" }
+        wasteQuantity: { type: number, minimum: 0 }
+        outputs:
+          type: array
+          items: { $ref: "#/components/schemas/TransformationOutputResult" }
     DailySummary:
       type: object
-      required: [date, storeId, grossSales, netSales, shrinkageCost, recoverySales, paymentSuccessRate]
+      required: [date, storeId, grossSales, netSales, shrinkageCost, recoverySales, inventoryValue,
+        reconciliationVarianceCost, paymentSuccessRate]
       properties:
         date: { type: string, format: date }
         storeId: { $ref: "#/components/schemas/Identifier" }
@@ -551,7 +1168,57 @@ components:
         netSales: { $ref: "#/components/schemas/Money" }
         shrinkageCost: { $ref: "#/components/schemas/Money" }
         recoverySales: { $ref: "#/components/schemas/Money" }
+        inventoryValue: { $ref: "#/components/schemas/Money" }
+        reconciliationVarianceCost: { $ref: "#/components/schemas/Money" }
         paymentSuccessRate: { type: number, minimum: 0, maximum: 1 }
+    ReconciliationLineRequest:
+      type: object
+      additionalProperties: false
+      required: [skuId, countedQuantity]
+      properties:
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        countedQuantity: { type: number, minimum: 0 }
+        note: { type: string, maxLength: 500 }
+    ReconciliationRequest:
+      type: object
+      additionalProperties: false
+      required: [storeId, businessDate, lines]
+      properties:
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        businessDate: { type: string, format: date }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ReconciliationLineRequest" }
+    ReconciliationDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ReconciliationLineResponse:
+      type: object
+      required: [skuId, expectedQuantity, countedQuantity, varianceQuantity]
+      properties:
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        expectedQuantity: { type: number }
+        countedQuantity: { type: number }
+        varianceQuantity: { type: number }
+        note:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+    ReconciliationResponse:
+      type: object
+      required: [reconciliationId, storeId, businessDate, status, lines]
+      properties:
+        reconciliationId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        businessDate: { type: string, format: date }
+        status: { type: string, enum: [SUBMITTED, FINALIZED, REOPENED] }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/ReconciliationLineResponse" }
     FieldError:
       type: object
       required: [field, code, message]
