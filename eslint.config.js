@@ -7,7 +7,7 @@ import react from "eslint-plugin-react";
 import localRules from "./eslint-rules/index.js";
 
 export default [
-  { ignores: ["dist"] },
+  { ignores: ["dist", "archive", "backups"] },
   {
     files: ["**/*.{js,jsx}"],
     languageOptions: {

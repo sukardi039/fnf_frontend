@@ -15,7 +15,11 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
-import { request } from "../../helpers/axios_helper";
+import {
+  fetchActiveProducts,
+  generateSkuLabel,
+  downloadSkuLabel,
+} from "./productApi";
 
 const OUTPUT_FORMATS = ["PNG", "PDF"];
 
@@ -33,10 +37,7 @@ const SkuLabelGenerator = () => {
   useEffect(() => {
     let active = true;
 
-    request("GET", "/api/products?active=true", null, {
-      skipAuthRedirect: true,
-      skipBackendErrorDialog: true,
-    })
+    fetchActiveProducts()
       .then((response) => {
         if (!active) return;
         setProducts(
@@ -66,12 +67,7 @@ const SkuLabelGenerator = () => {
     setError("");
     setLabel(null);
     try {
-      const response = await request(
-        "POST",
-        "/api/labels",
-        { skuId, outputFormat },
-        { skipAuthRedirect: true, skipBackendErrorDialog: true },
-      );
+      const response = await generateSkuLabel({ skuId, outputFormat });
       setLabel(response.data);
     } catch (requestError) {
       setError(
@@ -88,11 +84,10 @@ const SkuLabelGenerator = () => {
     setDownloading(true);
     setError("");
     try {
-      const response = await request("GET", label.downloadUrl, null, {
-        responseType: "blob",
-        skipAuthRedirect: true,
-        skipBackendErrorDialog: true,
-      });
+      const response = await downloadSkuLabel(
+        label.labelRef,
+        label.outputFormat,
+      );
       const objectUrl = URL.createObjectURL(response.data);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;

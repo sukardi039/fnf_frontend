@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { Box, Typography, Button } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import HeaderBar from "./HeaderBar";
@@ -13,6 +14,16 @@ const PageHeader = ({
   breadcrumbs,
   onHelpClick,
 }) => {
+  PageHeader.propTypes = {
+    title: PropTypes.string.isRequired,
+    subtitle: PropTypes.string,
+    action: PropTypes.node,
+    actionLabel: PropTypes.string,
+    onActionClick: PropTypes.func,
+    icon: PropTypes.elementType,
+    breadcrumbs: PropTypes.node,
+    onHelpClick: PropTypes.func,
+  };
   const actionNode =
     action ||
     (actionLabel && onActionClick ? (
@@ -32,7 +43,12 @@ const PageHeader = ({
 
   const iconNode = Icon ? (
     <Box
-      style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
       sx={{
         width: { xs: 36, sm: 48 },
         height: { xs: 36, sm: 48 },

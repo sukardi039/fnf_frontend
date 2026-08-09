@@ -1,12 +1,19 @@
 import React, { useContext, useEffect, useState } from "react";
-import { Alert, Box, InputAdornment, TextField } from "@mui/material";
+import {
+  Alert,
+  Box,
+  IconButton,
+  InputAdornment,
+  TextField,
+} from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   Inventory2 as InventoryIcon,
   Search as SearchIcon,
+  Edit as EditIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { request } from "../../helpers/axios_helper";
+import { listProducts } from "./productApi";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
 import {
   BlockListItem,
@@ -28,38 +35,55 @@ const ProductCatalog = () => {
   const [error, setError] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
   const { userInfo } = useContext(AuthContext);
+
+  const loadProducts = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await listProducts();
+      setProducts(
+        Array.isArray(response.data?.items) ? response.data.items : [],
+      );
+    } catch (requestError) {
+      if (requestError?.response?.status === 401) {
+        setError(t("product.backendPending"));
+      } else {
+        setError(
+          requestError?.response?.data?.message || t("product.loadFailed"),
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
-
-    request("GET", "/api/products", null, {
-      skipAuthRedirect: true,
-      skipBackendErrorDialog: true,
-    })
-      .then((response) => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const response = await listProducts();
         if (!active) return;
         setProducts(
           Array.isArray(response.data?.items) ? response.data.items : [],
         );
-      })
-      .catch((requestError) => {
+      } catch (requestError) {
         if (!active) return;
-        if (
-          requestError?.response?.status === 401 &&
-          requestError?.response?.data?.message === "Unauthorized path"
-        ) {
+        if (requestError?.response?.status === 401) {
           setError(t("product.backendPending"));
-          return;
+        } else {
+          setError(
+            requestError?.response?.data?.message || t("product.loadFailed"),
+          );
         }
-        setError(
-          requestError?.response?.data?.message || t("product.loadFailed"),
-        );
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
 
+    load();
     return () => {
       active = false;
     };
@@ -136,12 +160,32 @@ const ProductCatalog = () => {
       align: "center",
       headerAlign: "center",
     },
+    {
+      field: "actions",
+      headerName: t("basic.actions"),
+      width: 90,
+      align: "center",
+      headerAlign: "center",
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <IconButton
+          size="small"
+          onClick={() => setEditingProduct(params.row)}
+          aria-label={t("product.editTitle")}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+      ),
+    },
   ];
 
-  const blockColumnDefs = columns.map((column) => ({
-    field: column.field,
-    label: column.headerName,
-  }));
+  const blockColumnDefs = columns
+    .filter((column) => column.field !== "actions")
+    .map((column) => ({
+      field: column.field,
+      label: column.headerName,
+    }));
 
   if (loading) {
     return <LoadingState message={t("product.loading")} />;
@@ -151,7 +195,23 @@ const ProductCatalog = () => {
     return (
       <ProductForm
         companyId={String(userInfo?.companyId || "")}
-        onCancel={() => setShowAdd(false)}
+        onCancel={(saved) => {
+          setShowAdd(false);
+          if (saved) loadProducts();
+        }}
+      />
+    );
+  }
+
+  if (editingProduct) {
+    return (
+      <ProductForm
+        product={editingProduct}
+        companyId={String(userInfo?.companyId || "")}
+        onCancel={(saved) => {
+          setEditingProduct(null);
+          if (saved) loadProducts();
+        }}
       />
     );
   }

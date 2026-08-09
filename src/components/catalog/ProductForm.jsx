@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   FormControlLabel,
   MenuItem,
   Switch,
@@ -12,23 +13,42 @@ import {
 import { useTranslation } from "react-i18next";
 import { HeaderBar } from "../common";
 import { generateProductCode } from "../../helpers/itemcode_helper";
+import { createProduct, updateProduct } from "./productApi";
 
 const PRODUCT_FORMATS = ["WHOLE", "CUT", "JUICE"];
 const UOM_OPTIONS = ["EA", "KG", "G", "L", "ML"];
 
-const ProductForm = ({ companyId, onCancel }) => {
+const ProductForm = ({ product, companyId, onCancel }) => {
   const { t } = useTranslation();
-  const [form, setForm] = useState(() => ({
-    productCode: generateProductCode(companyId),
-    productName: "",
-    format: "WHOLE",
-    uom: "EA",
-    price: "",
-    currency: "SGD",
-    active: true,
-  }));
+  const isEdit = Boolean(product?.productId);
+  const [form, setForm] = useState(() => {
+    if (isEdit) {
+      return {
+        productCode: product.productCode || "",
+        productName: product.productName || "",
+        format: product.format || "WHOLE",
+        uom: product.uom || "EA",
+        price:
+          product.price === undefined || product.price === null
+            ? ""
+            : String(product.price),
+        currency: product.currency || "SGD",
+        active: product.active !== false,
+      };
+    }
+    return {
+      productCode: generateProductCode(companyId),
+      productName: "",
+      format: "WHOLE",
+      uom: "EA",
+      price: "",
+      currency: "SGD",
+      active: true,
+    };
+  });
   const [errors, setErrors] = useState({});
-  const [backendPending, setBackendPending] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState(null);
 
   const handleChange = (event) => {
     const { name, value, checked, type } = event.target;
@@ -37,7 +57,7 @@ const ProductForm = ({ companyId, onCancel }) => {
       [name]: type === "checkbox" ? checked : value,
     }));
     setErrors((current) => ({ ...current, [name]: "" }));
-    setBackendPending(false);
+    setResult(null);
   };
 
   const validate = () => {
@@ -48,29 +68,61 @@ const ProductForm = ({ companyId, onCancel }) => {
     if (form.price === "" || Number(form.price) < 0) {
       nextErrors.price = t("product.validation.priceRequired");
     }
+    if (!form.uom) {
+      nextErrors.uom = t("product.validation.uomRequired");
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) return;
-    setBackendPending(true);
+    setSaving(true);
+    setResult(null);
+    const payload = {
+      productCode: form.productCode,
+      productName: form.productName.trim(),
+      format: form.format,
+      uom: form.uom,
+      price: Number(form.price),
+      currency: form.currency,
+      active: form.active,
+    };
+    try {
+      if (isEdit) {
+        await updateProduct(product.productId, payload);
+      } else {
+        await createProduct(payload);
+      }
+      setResult({
+        severity: "success",
+        text: t(isEdit ? "product.updated" : "product.created"),
+      });
+      setTimeout(() => onCancel(true), 600);
+    } catch (err) {
+      setResult({
+        severity: "error",
+        text: err?.response?.data?.message || t("product.saveFailed"),
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <HeaderBar
-        title={t("product.addTitle")}
+        title={t(isEdit ? "product.editTitle" : "product.addTitle")}
         subtitle={t("product.formSubtitle")}
         showBackButton
         onBack={() => onCancel(false)}
         backLabel={t("basic.back")}
       />
 
-      {backendPending && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {t("product.writeBackendPending")}
+      {result && (
+        <Alert severity={result.severity} sx={{ mb: 2 }}>
+          {result.text}
         </Alert>
       )}
 
@@ -158,11 +210,19 @@ const ProductForm = ({ companyId, onCancel }) => {
         />
       </Box>
 
-      <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
-        <Button type="submit" variant="contained">
-          {t("basic.save")}
+      <Box sx={{ display: "flex", gap: 2, mt: 3, alignItems: "center" }}>
+        <Button type="submit" variant="contained" disabled={saving}>
+          {saving ? (
+            <CircularProgress size={24} color="inherit" />
+          ) : (
+            t("basic.save")
+          )}
         </Button>
-        <Button variant="outlined" onClick={() => onCancel(false)}>
+        <Button
+          variant="outlined"
+          onClick={() => onCancel(false)}
+          disabled={saving}
+        >
           {t("basic.cancel")}
         </Button>
       </Box>
@@ -171,6 +231,16 @@ const ProductForm = ({ companyId, onCancel }) => {
 };
 
 ProductForm.propTypes = {
+  product: PropTypes.shape({
+    productId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    productCode: PropTypes.string,
+    productName: PropTypes.string,
+    format: PropTypes.string,
+    uom: PropTypes.string,
+    price: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    currency: PropTypes.string,
+    active: PropTypes.bool,
+  }),
   companyId: PropTypes.string,
   onCancel: PropTypes.func.isRequired,
 };

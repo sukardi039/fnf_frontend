@@ -8,7 +8,6 @@ import {
   ListItemIcon,
   ListItemText,
   Collapse,
-  Divider,
   useMediaQuery,
   useTheme,
   IconButton,
@@ -26,6 +25,7 @@ import {
   Dashboard as DashboardIcon,
   History as HistoryIcon,
   CompareArrows as CompareArrowsIcon,
+  Add as AddIcon,
   PersonAdd as PersonAddIcon,
   AutoStories as AutoStoriesIcon,
   UploadFile as UploadFileIcon,
@@ -49,6 +49,14 @@ import {
   Percent as PercentIcon,
   ShoppingCart as ShoppingCartIcon,
   Undo as RefundIcon,
+  BarChart as BarChartIcon,
+  AccountBalance as AccountBalanceIcon,
+  Transform as TransformIcon,
+  Inventory as InventoryIcon,
+  ThumbUp as ThumbUpIcon,
+  Warning as WarningIcon,
+  TrendingUp as TrendingUpIcon,
+  Payment as PaymentIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -160,6 +168,18 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
           icon: <BusinessIcon />,
           children: [
             {
+              key: "stores",
+              label: t("menu.stores", "Stores"),
+              icon: <StoreIcon fontSize="small" />,
+              path: "/store",
+            },
+            {
+              key: "vendors",
+              label: t("menu.vendors"),
+              icon: <StoreIcon fontSize="small" />,
+              path: "/vendor",
+            },
+            {
               key: "staffSkills",
               label: t("menu.staffSkillList", "Staff Skill List"),
               icon: <AutoStoriesIcon fontSize="small" />,
@@ -244,6 +264,164 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               icon: <QrCode2Icon fontSize="small" />,
               path: "/catalog/labels",
             },
+            {
+              key: "uoms",
+              label: t("menu.uoms", "UOMs"),
+              icon: <TuneIcon fontSize="small" />,
+              path: "/catalog/uoms",
+            },
+            {
+              key: "uomConversions",
+              label: t("menu.uomConversions", "Conversions"),
+              icon: <CompareArrowsIcon fontSize="small" />,
+              path: "/catalog/uom-conversions",
+            },
+          ],
+        },
+        {
+          key: "Inventory",
+          menu: null,
+          label: t("menu.inventory", "Inventory"),
+          icon: <InventoryIcon />,
+          children: [
+            {
+              key: "purchaseLotReceive",
+              label: t("menu.purchaseLotReceive"),
+              icon: <WarehouseIcon fontSize="small" />,
+              path: "/inventory/lots/receive",
+            },
+            {
+              key: "lossEvent",
+              label: t("menu.lossEvent"),
+              icon: <CompareArrowsIcon fontSize="small" />,
+              path: "/inventory/loss-events/new",
+            },
+            {
+              key: "lossApprovals",
+              label: t("menu.lossApprovals"),
+              icon: <ThumbUpIcon fontSize="small" />,
+              path: "/inventory/loss-approvals",
+            },
+            {
+              key: "inventoryMovements",
+              label: t("menu.inventoryMovements"),
+              icon: <HistoryIcon fontSize="small" />,
+              path: "/inventory/movements",
+            },
+            {
+              key: "stockView",
+              label: t("menu.stockView", "Stock View"),
+              icon: <InventoryIcon fontSize="small" />,
+              path: "/inventory/stock-view",
+            },
+          ],
+        },
+        {
+          key: "Checkout",
+          menu: null,
+          label: t("menu.checkout"),
+          icon: <ShoppingCartIcon />,
+          children: [
+            {
+              key: "staffCheckout",
+              label: t("menu.staffCheckout"),
+              icon: <ShoppingCartIcon fontSize="small" />,
+              path: "/checkout/staff",
+            },
+            {
+              key: "refundRequest",
+              label: t("menu.refundRequest"),
+              icon: <RefundIcon fontSize="small" />,
+              path: "/checkout/refunds/new",
+            },
+            {
+              key: "refundApproval",
+              label: t("menu.refundApproval", "Approve Refund"),
+              icon: <RefundIcon fontSize="small" />,
+              path: "/checkout/refunds/approve",
+            },
+            {
+              key: "paymentDashboard",
+              label: t("menu.paymentDashboard"),
+              icon: <PaymentIcon fontSize="small" />,
+              path: "/checkout/payments",
+            },
+          ],
+        },
+        {
+          key: "Transformation",
+          menu: null,
+          label: t("menu.transformation", "Transformation"),
+          icon: <TransformIcon />,
+          children: [
+            {
+              key: "transformationRecipes",
+              label: t("menu.transformationRecipes", "Recipes"),
+              icon: <AutoStoriesIcon fontSize="small" />,
+              path: "/transformations/recipes",
+            },
+            {
+              key: "transformationBatches",
+              label: t("menu.transformationBatches", "Batches"),
+              icon: <CompareArrowsIcon fontSize="small" />,
+              path: "/transformations/batches",
+            },
+            {
+              key: "transformationRunBatch",
+              label: t("menu.transformationRunBatch", "Run Batch"),
+              icon: <AddIcon fontSize="small" />,
+              path: "/transformations/batches/new",
+            },
+            {
+              key: "transformationApprovals",
+              label: t("menu.transformationApprovals", "Approvals"),
+              icon: <ThumbUpIcon fontSize="small" />,
+              path: "/transformations/approvals",
+            },
+          ],
+        },
+        {
+          key: "Reporting",
+          menu: null,
+          label: t("menu.reporting", "Reporting"),
+          icon: <BarChartIcon />,
+          children: [
+            {
+              key: "dailySummary",
+              label: t("menu.dailySummary", "Daily Summary"),
+              icon: <BarChartIcon fontSize="small" />,
+              path: "/reports/daily-summary",
+            },
+            {
+              key: "lossReport",
+              label: t("menu.lossReport"),
+              icon: <WarningIcon fontSize="small" />,
+              path: "/reports/loss",
+            },
+            {
+              key: "recoveryReport",
+              label: t("menu.recoveryReport"),
+              icon: <TrendingUpIcon fontSize="small" />,
+              path: "/reports/recovery",
+            },
+            {
+              key: "paymentSettlement",
+              label: t("menu.paymentSettlement"),
+              icon: <AccountBalanceIcon fontSize="small" />,
+              path: "/reports/payment-settlement",
+            },
+            {
+              key: "inventoryReport",
+              label: t("menu.inventoryReport"),
+              icon: <InventoryIcon fontSize="small" />,
+              path: "/reports/inventory",
+            },
+            {
+              key: "reconciliation",
+              label: t("menu.reconciliation", "Reconciliation"),
+              icon: <AccountBalanceIcon fontSize="small" />,
+              path: "/reports/reconciliation",
+            },
           ],
         },
         {
@@ -265,7 +443,7 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
             },
             {
               key: "vendors",
-              label: t("menu.vendor"),
+              label: t("menu.vendors"),
               icon: <StoreIcon fontSize="small" />,
               path: "/vendor",
             },
@@ -309,94 +487,7 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
             },
           ],
         },
-        {
-          key: "Inventory",
-          menu: "Inventory",
-          label: t("menu.inventory", "Inventory"),
-          icon: <StoreIcon />,
-          children: [
-            {
-              key: "purchaseLotReceive",
-              label: t("menu.purchaseLotReceive"),
-              icon: <WarehouseIcon fontSize="small" />,
-              path: "/inventory/lots/receive",
-            },
-            {
-              key: "lossEvent",
-              label: t("menu.lossEvent"),
-              icon: <CompareArrowsIcon fontSize="small" />,
-              path: "/inventory/loss-events/new",
-            },
-            isParamEnabled("stockTakeOn")
-              ? {
-                  key: "stockTakeOn",
-                  label: t("menu.stockTake", "Stock Take On"),
-                  icon: <AutoStoriesIcon fontSize="small" />,
-                  path: "/stocktakeon",
-                }
-              : null,
-            isParamEnabled("manualStockEntry")
-              ? {
-                  key: "stockIn",
-                  label: t("menu.stockIn", "Stock In"),
-                  icon: <AutoStoriesIcon fontSize="small" />,
-                  path: "/stockin",
-                }
-              : null,
-            isParamEnabled("manualStockEntry")
-              ? {
-                  key: "stockOut",
-                  label: t("menu.stockOut", "Stock Out"),
-                  icon: <AutoStoriesIcon fontSize="small" />,
-                  path: "/stockout",
-                }
-              : null,
-            {
-              key: "stockTransfer",
-              label: t("menu.stockTransfer", "Stock Transfer"),
-              icon: <CompareArrowsIcon fontSize="small" />,
-              path: "/stocktransfer",
-            },
-            {
-              key: "stockAdjustment",
-              label: t("menu.stockAdjustment", "Stock Adjustment"),
-              icon: <CompareArrowsIcon fontSize="small" />,
-              path: "/stockadjustment",
-            },
-            {
-              key: "stockEnquiry",
-              label: t("menu.stockEnquiry", "Stock Enquiry"),
-              icon: <HistoryIcon fontSize="small" />,
-              path: "/stockenquiry",
-            },
-            {
-              key: "stockCard",
-              label: t("menu.stockCard", "Inventory Card"),
-              icon: <HistoryIcon fontSize="small" />,
-              path: "/stockcard",
-            },
-          ].filter(Boolean),
-        },
-        {
-          key: "Checkout",
-          menu: null,
-          label: t("menu.checkout"),
-          icon: <ShoppingCartIcon />,
-          children: [
-            {
-              key: "staffCheckout",
-              label: t("menu.staffCheckout"),
-              icon: <ShoppingCartIcon fontSize="small" />,
-              path: "/checkout/staff",
-            },
-            {
-              key: "refundRequest",
-              label: t("menu.refundRequest"),
-              icon: <RefundIcon fontSize="small" />,
-              path: "/checkout/refunds/new",
-            },
-          ],
-        },
+
         {
           key: "ProjectManagement",
           menu: "ProjectControl",
@@ -563,13 +654,22 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
         "/catalog/labels",
         "/inventory/lots/receive",
         "/inventory/loss-events/new",
+        "/inventory/loss-approvals",
+        "/inventory/movements",
         "/checkout/staff",
+        "/checkout/payments",
         "/checkout/refunds/new",
+        "/store",
+        "/vendor",
         "/parameter",
         "/language-settings",
         "/settings",
         "/profile",
         "/qr-generator",
+        "/reports/loss",
+        "/reports/recovery",
+        "/reports/payment-settlement",
+        "/reports/inventory",
       ]),
     [],
   );

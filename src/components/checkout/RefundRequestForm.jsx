@@ -37,7 +37,7 @@ const RefundRequestForm = () => {
     try {
       const response = await request(
         "POST",
-        "/api/refunds",
+        "/api/v1/refunds",
         {
           transactionId: transactionId.trim(),
           reason: reason.trim(),

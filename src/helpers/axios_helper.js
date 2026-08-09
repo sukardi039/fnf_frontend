@@ -2,8 +2,18 @@ import axios from "axios";
 
 // Simple token storage helpers (persisted in localStorage)
 export const getAuthToken = () => {
+  // Prefer sessionStorage over localStorage for access tokens as we migrate
+  // toward secure HttpOnly cookies. sessionStorage is cleared when the tab closes.
+  try {
+    const sessionToken = window.sessionStorage.getItem("auth_token");
+    if (sessionToken && sessionToken !== "null") return sessionToken;
+  } catch {
+    // ignore
+  }
+
   const token = window.localStorage.getItem("auth_token");
   if (token && token !== "null") return token;
+
   try {
     const userInfo = window.localStorage.getItem("user_info");
     if (userInfo) {
@@ -13,6 +23,7 @@ export const getAuthToken = () => {
   } catch {
     // ignore
   }
+
   return null;
 };
 
@@ -35,14 +46,27 @@ const redirectToLogin = () => {
     } catch (e) {
       /* ignore */
     }
-    window.location.href = "/login";
+    const isCustomerPath =
+      typeof window !== "undefined" &&
+      window.location.pathname.startsWith("/m/");
+    window.location.href = isCustomerPath ? "/m/auth" : "/login";
   }
 };
 
 export const setAuthHeader = (token) => {
   if (token !== null && token !== undefined) {
+    try {
+      window.sessionStorage.setItem("auth_token", token);
+    } catch {
+      // ignore
+    }
     window.localStorage.setItem("auth_token", token);
   } else {
+    try {
+      window.sessionStorage.removeItem("auth_token");
+    } catch {
+      // ignore
+    }
     window.localStorage.removeItem("auth_token");
   }
 };
@@ -195,6 +219,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     const responseToken = extractTokenFromResponse(response);
+    // Prefer cookies; only use body tokens as a transitional fallback.
     if (responseToken) {
       setAuthHeader(responseToken);
     }
@@ -279,7 +304,7 @@ api.interceptors.response.use(
       try {
         // Try refresh endpoint (server should use HttpOnly refresh cookie)
         const refreshRes = await axios.post(
-          `${API_BASE_URL}/auth/refresh`,
+          `${API_BASE_URL}/api/v1/auth/session/refresh`,
           null,
           { withCredentials: true },
         );

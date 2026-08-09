@@ -1,15 +1,30 @@
-import React, { useEffect, useState } from "react";
-import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
+import React, { useContext, useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TextField,
+} from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
+import { AuthContext } from "../../context/authContext";
 import { request } from "../../helpers/axios_helper";
 import { toLocalISO } from "../../helpers/date_helper";
 import { fetchActiveProducts } from "../catalog/productApi";
+import { listStores } from "../../helpers/store_helper";
 
 const PurchaseLotReceive = () => {
   const { t } = useTranslation();
+  const { userInfo } = useContext(AuthContext);
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [stores, setStores] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [loadingScopes, setLoadingScopes] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -29,24 +44,54 @@ const PurchaseLotReceive = () => {
   useEffect(() => {
     let active = true;
 
-    fetchActiveProducts()
-      .then((response) => {
+    Promise.all([
+      fetchActiveProducts(),
+      listStores({ companyId: userInfo?.companyId, active: true }),
+      request("GET", "/api/v1/vendors?active=true", null, {
+        skipAuthRedirect: true,
+        skipBackendErrorDialog: true,
+      }),
+    ])
+      .then(([productsResponse, storesResponse, vendorsResponse]) => {
         if (!active) return;
         setProducts(
-          Array.isArray(response.data?.items) ? response.data.items : [],
+          Array.isArray(productsResponse.data?.items)
+            ? productsResponse.data.items
+            : [],
         );
+        const storeItems = Array.isArray(storesResponse.data?.items)
+          ? storesResponse.data.items
+          : Array.isArray(storesResponse.data)
+            ? storesResponse.data
+            : [];
+        setStores(storeItems);
+        const vendorItems = Array.isArray(vendorsResponse.data)
+          ? vendorsResponse.data
+          : Array.isArray(vendorsResponse.data?.items)
+            ? vendorsResponse.data.items
+            : [];
+        setVendors(vendorItems);
+        if (storeItems.length === 1) {
+          setForm((current) => ({
+            ...current,
+            storeId: String(storeItems[0].storeId || storeItems[0].id || ""),
+          }));
+        }
       })
       .catch(() => {
-        if (active) setError(t("purchaseLot.productsUnavailable"));
+        if (active) setError(t("purchaseLot.scopesUnavailable"));
       })
       .finally(() => {
-        if (active) setLoadingProducts(false);
+        if (active) {
+          setLoadingProducts(false);
+          setLoadingScopes(false);
+        }
       });
 
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [t, userInfo?.companyId]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -65,6 +110,26 @@ const PurchaseLotReceive = () => {
       uom: product?.uom || "",
     }));
     setErrors((current) => ({ ...current, skuId: "" }));
+    setError("");
+    setResult(null);
+  };
+
+  const handleStoreChange = (event) => {
+    setForm((current) => ({
+      ...current,
+      storeId: event.target.value,
+    }));
+    setErrors((current) => ({ ...current, storeId: "" }));
+    setError("");
+    setResult(null);
+  };
+
+  const handleSupplierChange = (event) => {
+    setForm((current) => ({
+      ...current,
+      supplierId: event.target.value,
+    }));
+    setErrors((current) => ({ ...current, supplierId: "" }));
     setError("");
     setResult(null);
   };
@@ -95,7 +160,7 @@ const PurchaseLotReceive = () => {
     try {
       const response = await request(
         "POST",
-        "/api/lots/receive",
+        "/api/v1/lots/receive",
         {
           storeId: form.storeId.trim(),
           supplierId: form.supplierId.trim(),
@@ -123,7 +188,7 @@ const PurchaseLotReceive = () => {
     }
   };
 
-  if (loadingProducts) {
+  if (loadingProducts || loadingScopes) {
     return <LoadingState message={t("purchaseLot.loadingProducts")} />;
   }
 
@@ -157,26 +222,49 @@ const PurchaseLotReceive = () => {
           maxWidth: 880,
         }}
       >
-        <TextField
-          label={t("purchaseLot.storeId")}
-          name="storeId"
-          value={form.storeId}
-          onChange={handleChange}
-          error={Boolean(errors.storeId)}
-          helperText={errors.storeId}
-          required
-          fullWidth
-        />
-        <TextField
-          label={t("purchaseLot.supplierId")}
-          name="supplierId"
-          value={form.supplierId}
-          onChange={handleChange}
-          error={Boolean(errors.supplierId)}
-          helperText={errors.supplierId}
-          required
-          fullWidth
-        />
+        <FormControl fullWidth error={Boolean(errors.storeId)} required>
+          <InputLabel id="purchase-lot-store-label">
+            {t("purchaseLot.storeId")}
+          </InputLabel>
+          <Select
+            labelId="purchase-lot-store-label"
+            value={form.storeId}
+            label={t("purchaseLot.storeId")}
+            onChange={handleStoreChange}
+          >
+            {stores.map((store) => (
+              <MenuItem
+                key={store.storeId || store.id}
+                value={String(store.storeId || store.id)}
+              >
+                {store.storeName || store.name || store.storeId || store.id}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl fullWidth error={Boolean(errors.supplierId)} required>
+          <InputLabel id="purchase-lot-supplier-label">
+            {t("purchaseLot.supplierId")}
+          </InputLabel>
+          <Select
+            labelId="purchase-lot-supplier-label"
+            value={form.supplierId}
+            label={t("purchaseLot.supplierId")}
+            onChange={handleSupplierChange}
+          >
+            {vendors.map((vendor) => (
+              <MenuItem
+                key={vendor.vendorId || vendor.id}
+                value={String(vendor.vendorId || vendor.id)}
+              >
+                {vendor.vendorName ||
+                  vendor.name ||
+                  vendor.vendorId ||
+                  vendor.id}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <TextField
           select
           label={t("purchaseLot.product")}

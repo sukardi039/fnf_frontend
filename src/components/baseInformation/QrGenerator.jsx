@@ -14,7 +14,7 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
-import { signEntity } from "../../helpers/qr_token_helper";
+import { issueQrToken } from "../../helpers/qr_token_helper";
 import PageHeader from "../common/PageHeader";
 import HelpDialog from "../common/HelpDialog";
 
@@ -37,8 +37,12 @@ const QrGenerator = () => {
     setError("");
     setGenerating(true);
     try {
-      const token = await signEntity(trimmed);
+      const token = await issueQrToken(trimmed);
       setQrToken(token);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message || t("qrGenerator.issueFailed"),
+      );
     } finally {
       setGenerating(false);
     }

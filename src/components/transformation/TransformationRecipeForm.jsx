@@ -179,7 +179,7 @@ const TransformationRecipeForm = () => {
     try {
       const response = await request(
         "POST",
-        "/api/transformation-recipes",
+        "/api/v1/transformation-recipes",
         {
           companyId: form.companyId.trim(),
           recipeName: form.recipeName.trim(),

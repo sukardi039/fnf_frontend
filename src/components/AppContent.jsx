@@ -29,7 +29,12 @@ import {
 import PdaLogin from "./pda/PdaLogin.jsx";
 import TvBootstrap from "./tv/TvBootstrap.jsx";
 import PdaAccessHome from "./pda/PdaAccessHome.jsx";
+import PdaLayout from "./pda/PdaLayout.jsx";
+import PdaMe from "./pda/PdaMe.jsx";
+import PlaceholderPage from "./common/PlaceholderPage.jsx";
+import { ShoppingCart as CheckoutIcon } from "@mui/icons-material";
 import TvDisplayHome from "./tv/TvDisplayHome.jsx";
+import CustomerShell from "./customer/CustomerShell.jsx";
 
 const TV_AUTOSTART_KEY = "tv_display_autostart";
 
@@ -256,13 +261,26 @@ export default function AppContent() {
       ) : location.pathname.startsWith("/pda") ? (
         <Routes>
           <Route path="/pda/login" element={<PdaLogin />} />
-          <Route
-            path="/pda/menu"
-            element={<Navigate to="/pda/home" replace />}
-          />
-          <Route path="/pda/home" element={<PdaAccessHome />} />
-          <Route path="/pda" element={<Navigate to="/pda/home" replace />} />
-          <Route path="/pda/*" element={<Navigate to="/pda/home" replace />} />
+          <Route path="/pda" element={<PdaLayout />}>
+            <Route index element={<Navigate to="/pda/home" replace />} />
+            <Route path="home" element={<PdaAccessHome />} />
+            <Route
+              path="checkout"
+              element={
+                <PlaceholderPage
+                  titleKey="placeholder.assistedCheckoutTitle"
+                  descriptionKey="placeholder.assistedCheckoutDescription"
+                  icon={CheckoutIcon}
+                />
+              }
+            />
+            <Route path="me" element={<PdaMe />} />
+            <Route path="*" element={<Navigate to="/pda/home" replace />} />
+          </Route>
+        </Routes>
+      ) : location.pathname.startsWith("/m") ? (
+        <Routes>
+          <Route path="/m/*" element={<CustomerShell />} />
         </Routes>
       ) : !isAuthenticated ? (
         <AuthLayout>

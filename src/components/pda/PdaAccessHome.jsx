@@ -12,7 +12,7 @@ import {
   QrCodeScanner as ScanIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { request } from "../../helpers/axios_helper";
+import { resolvePdaScan, confirmHandover } from "../../helpers/pda_helper";
 
 export default function PdaAccessHome() {
   const { t } = useTranslation();
@@ -52,12 +52,7 @@ export default function PdaAccessHome() {
     setTransaction(null);
     setHandover(null);
     try {
-      const response = await request(
-        "POST",
-        "/api/pda/scan/resolve",
-        { qrToken: token, deviceId },
-        { skipAuthRedirect: true, skipBackendErrorDialog: true },
-      );
+      const response = await resolvePdaScan({ qrToken: token, deviceId });
       setTransaction(response.data);
     } catch (requestError) {
       setError(
@@ -75,16 +70,10 @@ export default function PdaAccessHome() {
     setHandingOver(true);
     setError("");
     try {
-      const response = await request(
-        "POST",
-        `/api/pda/transactions/${transaction.transactionId}/handover`,
-        { deviceId, staffId },
-        {
-          headers: { "Idempotency-Key": crypto.randomUUID() },
-          skipAuthRedirect: true,
-          skipBackendErrorDialog: true,
-        },
-      );
+      const response = await confirmHandover(transaction.transactionId, {
+        deviceId,
+        staffId,
+      });
       setHandover(response.data);
     } catch (requestError) {
       setError(

@@ -67,7 +67,7 @@ const StaffCheckout = () => {
     try {
       const response = await request(
         "POST",
-        "/api/carts",
+        "/api/v1/carts",
         {
           storeId: cartForm.storeId.trim(),
           channel: cartForm.channel,
@@ -103,7 +103,7 @@ const StaffCheckout = () => {
     try {
       const response = await request(
         "POST",
-        `/api/carts/${cart.cartId}/items`,
+        `/api/v1/carts/${cart.cartId}/items`,
         { skuId: itemForm.skuId, quantity: Number(itemForm.quantity) },
         {
           headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -130,7 +130,7 @@ const StaffCheckout = () => {
     try {
       const response = await request(
         "POST",
-        "/api/checkout",
+        "/api/v1/checkout",
         {
           cartId: cart.cartId,
           quoteId: quote.quoteId,

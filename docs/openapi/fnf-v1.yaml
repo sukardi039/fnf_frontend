@@ -190,6 +190,110 @@ paths:
                   total: { type: integer, minimum: 0 }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /uoms:
+    get:
+      tags: [Catalog]
+      operationId: listUoms
+      parameters:
+        - { name: active, in: query, schema: { type: boolean, default: true } }
+      responses:
+        "200":
+          description: Approved UOM list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Uom" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Catalog]
+      operationId: createUom
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UomRequest" }
+      responses:
+        "201":
+          description: UOM created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Uom" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /uoms/{uomId}:
+    put:
+      tags: [Catalog]
+      operationId: updateUom
+      parameters:
+        - name: uomId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UomRequest" }
+      responses:
+        "200":
+          description: UOM updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Uom" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /uom-conversions:
+    get:
+      tags: [Catalog]
+      operationId: listUomConversions
+      parameters:
+        - { name: fromUom, in: query, schema: { type: string } }
+        - { name: toUom, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean, default: true } }
+      responses:
+        "200":
+          description: UOM conversion records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/UomConversion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Catalog]
+      operationId: createUomConversion
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UomConversionRequest" }
+      responses:
+        "201":
+          description: Conversion record created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UomConversion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
   /price-rules:
     post:
       tags: [Catalog]
@@ -290,6 +394,32 @@ paths:
               schema: { type: string, contentEncoding: binary }
         "404": { $ref: "#/components/responses/NotFound" }
         "410": { $ref: "#/components/responses/Gone" }
+  /labels/resolve-qr:
+    post:
+      tags: [Catalog]
+      security: []
+      operationId: resolveSignedQr
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              minLength: 1
+              description: Compact base64-encoded signed QR payload returned by /labels
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignedQrResolutionRequest"
+      responses:
+        "200":
+          description: Active product metadata resolved from a backend-signed QR payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
   /lots/receive:
     post:
       tags: [Inventory]
@@ -341,6 +471,43 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /inventory/snapshots:
+    get:
+      tags: [Inventory]
+      operationId: listInventorySnapshots
+      parameters:
+        - name: storeId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: skuId
+          in: query
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: includeLots
+          in: query
+          schema: { type: boolean, default: false }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: Authoritative inventory snapshot by SKU and lot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/InventorySnapshot" }
+                  total: { type: integer, minimum: 0 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /carts:
     post:
       tags: [Checkout]
@@ -539,6 +706,26 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "410": { $ref: "#/components/responses/Gone" }
   /transformation-recipes:
+    get:
+      tags: [Transformation]
+      operationId: listTransformationRecipes
+      parameters:
+        - { name: active, in: query, schema: { type: boolean, default: true } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/RecipeType" } }
+      responses:
+        "200":
+          description: Active transformation recipes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TransformationRecipeResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [Transformation]
       operationId: createTransformationRecipe
@@ -777,10 +964,17 @@ components:
     PdaLoginExchangeRequest:
       type: object
       additionalProperties: false
-      required: [loginKey, deviceId]
+      required: [loginKey]
       properties:
         loginKey: { type: string, minLength: 1, maxLength: 128 }
-        deviceId: { $ref: "#/components/schemas/Identifier" }
+        deviceId:
+          oneOf:
+            - { $ref: "#/components/schemas/Identifier" }
+            - { type: "null" }
+        storeId:
+          oneOf:
+            - { $ref: "#/components/schemas/Identifier" }
+            - { type: "null" }
     CustomerRegistrationRequest:
       type: object
       additionalProperties: false
@@ -867,6 +1061,42 @@ components:
         price: { $ref: "#/components/schemas/Money" }
         currency: { type: string, pattern: "^[A-Z]{3}$" }
         active: { type: boolean }
+    Uom:
+      type: object
+      required: [uomId, code, name, precision, active]
+      properties:
+        uomId: { $ref: "#/components/schemas/Identifier" }
+        code: { type: string, minLength: 1, maxLength: 20 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        precision: { type: integer, minimum: 0, maximum: 4 }
+        active: { type: boolean }
+    UomRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, precision]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 20 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        precision: { type: integer, minimum: 0, maximum: 4 }
+        active: { type: boolean, default: true }
+    UomConversion:
+      type: object
+      required: [conversionId, fromUom, toUom, factor, active]
+      properties:
+        conversionId: { $ref: "#/components/schemas/Identifier" }
+        fromUom: { type: string, minLength: 1, maxLength: 20 }
+        toUom: { type: string, minLength: 1, maxLength: 20 }
+        factor: { type: number, exclusiveMinimum: 0 }
+        active: { type: boolean }
+    UomConversionRequest:
+      type: object
+      additionalProperties: false
+      required: [fromUom, toUom, factor]
+      properties:
+        fromUom: { type: string, minLength: 1, maxLength: 20 }
+        toUom: { type: string, minLength: 1, maxLength: 20 }
+        factor: { type: number, exclusiveMinimum: 0 }
+        active: { type: boolean, default: true }
     LabelGenerationRequest:
       type: object
       additionalProperties: false
@@ -883,6 +1113,12 @@ components:
         qrPayload: { type: string, minLength: 1 }
         outputFormat: { type: string, enum: [PNG, PDF] }
         downloadUrl: { type: string, format: uri-reference }
+    SignedQrResolutionRequest:
+      type: object
+      additionalProperties: false
+      required: [qrPayload]
+      properties:
+        qrPayload: { type: string, minLength: 1, description: Compact base64-encoded signed QR payload }
     PriceRuleRequest:
       type: object
       additionalProperties: false
@@ -926,6 +1162,36 @@ components:
         uom: { type: string }
         reasonCode: { type: string, enum: [SPOILAGE, MISHANDLING, THEFT, OTHER] }
         note: { type: string, maxLength: 500 }
+    InventorySnapshot:
+      type: object
+      required: [snapshotId, storeId, skuId, productName, uom, availableQuantity, reservedQuantity, onHandQuantity, weightedAverageCost]
+      properties:
+        snapshotId: { $ref: "#/components/schemas/Identifier" }
+        storeId: { $ref: "#/components/schemas/Identifier" }
+        skuId: { $ref: "#/components/schemas/Identifier" }
+        productName: { type: string }
+        uom: { type: string }
+        availableQuantity: { $ref: "#/components/schemas/Quantity" }
+        reservedQuantity: { $ref: "#/components/schemas/Quantity" }
+        onHandQuantity: { $ref: "#/components/schemas/Quantity" }
+        weightedAverageCost: { $ref: "#/components/schemas/Money" }
+        lots:
+          type: array
+          items: { $ref: "#/components/schemas/InventoryLotSnapshot" }
+    InventoryLotSnapshot:
+      type: object
+      required: [lotId, supplierLotRef, receivedAt, expiryDate, availableQuantity, reservedQuantity, onHandQuantity]
+      properties:
+        lotId: { $ref: "#/components/schemas/Identifier" }
+        supplierLotRef: { type: string }
+        receivedAt: { type: string, format: date-time }
+        expiryDate:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+        availableQuantity: { $ref: "#/components/schemas/Quantity" }
+        reservedQuantity: { $ref: "#/components/schemas/Quantity" }
+        onHandQuantity: { $ref: "#/components/schemas/Quantity" }
     CartCreateRequest:
       type: object
       additionalProperties: false
