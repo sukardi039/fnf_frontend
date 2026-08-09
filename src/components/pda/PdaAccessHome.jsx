@@ -33,7 +33,7 @@ export default function PdaAccessHome() {
 
   const deviceId = String(session.deviceId || "").trim();
   const staffId = String(session.staffId || "").trim();
-  const hasScopedIdentity = Boolean(deviceId && staffId);
+  const hasScopedIdentity = Boolean(staffId);
 
   const handleResolve = async (event) => {
     event.preventDefault();

@@ -171,7 +171,7 @@ const WASimulator = () => {
           skipBackendErrorDialog: true,
         },
       );
-      const loginKey = response.data.loginkey;
+      const loginKey = response.data.loginKey || response.data.loginkey;
 
       if (normalizedMessage === "otp") {
         appendMessages({
