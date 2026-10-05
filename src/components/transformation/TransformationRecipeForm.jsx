@@ -68,13 +68,14 @@ const TransformationRecipeForm = () => {
   const selectedInputs = form.inputSkuIds.filter(Boolean);
   const inputUom =
     products.find((product) => product.skuId === selectedInputs[0])?.uom || "";
-  const outputFormat = form.type === "WHOLE_TO_CUT" ? "CUT" : "JUICE";
+  const [inputFormatCode, outputFormatCode] = form.type.split("_TO_");
   const inputProducts = products.filter(
     (product) =>
-      product.format === "WHOLE" && (!inputUom || product.uom === inputUom),
+      product.format === inputFormatCode &&
+      (!inputUom || product.uom === inputUom),
   );
   const outputProducts = products.filter(
-    (product) => product.format === outputFormat,
+    (product) => product.format === outputFormatCode,
   );
   const selectedOutputs = form.outputs
     .map((output) => output.skuId)
@@ -179,7 +180,7 @@ const TransformationRecipeForm = () => {
     try {
       const response = await request(
         "POST",
-        "/api/v1/transformation-recipes",
+        "/api/transformation-recipes",
         {
           companyId: form.companyId.trim(),
           recipeName: form.recipeName.trim(),

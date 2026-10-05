@@ -1,36 +1,38 @@
 import { request } from "./axios_helper";
 
+const API_BASE = "/api";
+
 export const listVendors = ({ active = true } = {}) => {
   const query = new URLSearchParams();
   query.set("active", String(active));
-  return request("GET", `/api/v1/vendors?${query.toString()}`, null, {
+  return request("GET", `${API_BASE}/vendors?${query.toString()}`, null, {
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });
 };
 
 export const getVendor = (vendorId) =>
-  request("GET", `/api/v1/vendors/${encodeURIComponent(vendorId)}`, null, {
+  request("GET", `${API_BASE}/vendors/${encodeURIComponent(vendorId)}`, null, {
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });
 
 export const createVendor = (data) =>
-  request("POST", "/api/v1/vendors", data, {
+  request("POST", `${API_BASE}/vendors`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });
 
 export const updateVendor = (vendorId, data) =>
-  request("PUT", `/api/v1/vendors/${encodeURIComponent(vendorId)}`, data, {
+  request("PUT", `${API_BASE}/vendors/${encodeURIComponent(vendorId)}`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });
 
 export const deleteVendor = (vendorId) =>
-  request("DELETE", `/api/v1/vendors/${encodeURIComponent(vendorId)}`, null, {
+  request("DELETE", `${API_BASE}/vendors/${encodeURIComponent(vendorId)}`, null, {
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });

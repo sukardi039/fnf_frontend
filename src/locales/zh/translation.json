@@ -53,6 +53,20 @@
     "sample3Time": "2 小时前",
     "viewAll": "查看所有通知"
   },
+  "storeLocation": {
+    "locating": "正在通过 GPS 识别门店...",
+    "detected": "GPS 门店：{{store}}（距离 {{distance}} 米）",
+    "manualStore": "手动选择门店",
+    "manualHelp": "GPS 无法识别门店时，可以手动选择。",
+    "retry": "重试 GPS 门店定位",
+    "permissionDenied": "定位权限被拒绝。请允许定位或手动选择门店。",
+    "timeout": "GPS 定位超时。请重试或手动选择门店。",
+    "unsupported": "此设备不支持 GPS 定位。请手动选择门店。",
+    "unavailable": "无法获取 GPS 位置。请重试或手动选择门店。",
+    "noNearby": "在 {{radius}} 米内未找到具有有效 GPS 坐标的营业门店。请手动选择门店。",
+    "loadFailed": "无法加载门店列表。请重试以识别门店。",
+    "invalidStores": "后端返回的门店列表无效。"
+  },
   "dashboard": {
     "welcome": "欢迎回来",
     "subtitle": "您好，这是今天的情况",
@@ -75,6 +89,44 @@
       "userAdded": "新增用户",
       "customerUpdated": "客户已更新",
       "companyCreated": "公司已创建"
+    },
+    "discount": {
+      "title": "今日促销",
+      "subtitle": "生效及即将开始的折扣",
+      "loading": "加载促销中...",
+      "empty": "今天及未来两天没有生效的促销。",
+      "today": "今日",
+      "upcoming": "即将开始",
+      "todayCount": "今日：{{count}}",
+      "upcomingCount": "即将开始：{{count}}",
+      "placeholderTitle": "促销概览",
+      "placeholderSubtitle": "更多促销洞察即将推出。"
+    },
+    "sales": {
+      "title": "今日销售",
+      "subtitle": "今日门店销售、损耗与回收情况",
+      "loading": "加载销售中...",
+      "loadFailed": "无法加载销售数据。",
+      "totalQuantity": "数量：{{count}}",
+      "totalValue": "金额：{{value}}",
+      "quantity": "数量",
+      "value": "金额",
+      "topProducts": "销量前 5 产品",
+      "noProducts": "今日暂无产品销售记录。",
+      "noTrendData": "无每小时销售数据。",
+      "qty": "数量：{{count}}"
+    },
+    "inventory": {
+      "title": "库存状态",
+      "subtitle": "当前库存量与低库存提醒",
+      "loading": "加载库存中...",
+      "loadFailed": "无法加载库存数据。",
+      "noStore": "当前会话未分配门店。",
+      "totalSkus": "SKU：{{count}}",
+      "lowStock": "低库存：{{count}}",
+      "outOfStock": "缺货：{{count}}",
+      "lowStockItems": "低库存产品",
+      "noLowStock": "没有低库存产品。"
     }
   },
   "welcome": {
@@ -118,6 +170,9 @@
     "qrLoginDomainMismatch": "二维码登录链接无效，链接域名必须与当前系统一致。"
   },
   "pda": {
+    "checkout": {
+      "staffAssisted": "当前门店已通过 GPS 识别。添加商品并核对服务器报价，然后收款或打开支付链接。"
+    },
     "login": {
       "missingKey": "登录密匙缺失，请使用有效的 PDA 登录链接。",
       "expired": "此 PDA 登录链接已过期或无效，请重新扫描新的二维码。",
@@ -383,6 +438,8 @@
   "basic": {
     "true": "是",
     "false": "否",
+    "yes": "是",
+    "no": "否",
     "actions": "操作",
     "add": "新增",
     "save": "保存",
@@ -524,6 +581,7 @@
     "refundApproval": "审批退款",
     "uoms": "计量单位",
     "uomConversions": "单位换算",
+    "productFormats": "产品形态",
     "lossApprovals": "损耗审批",
     "inventoryMovements": "库存变动",
     "paymentDashboard": "支付看板",
@@ -1328,6 +1386,7 @@
     "description": "描述",
     "descriptionPlaceholder": "产品描述",
     "image": "上传图片",
+    "productPicture": "产品图片",
     "categoryError": "类别必须是 'A' 或 'C'",
     "categoryA": "资产",
     "categoryC": "消耗品",
@@ -1344,11 +1403,6 @@
     "active": "可销售",
     "formSubtitle": "设置鲜又鲜产品目录所需的可销售产品资料。",
     "writeBackendPending": "产品新增 API 尚未启用。输入内容已通过验证，但尚未保存。",
-    "formats": {
-      "WHOLE": "整果",
-      "CUT": "鲜切水果",
-      "JUICE": "果汁"
-    },
     "validation": {
       "nameRequired": "请输入产品名称。",
       "priceRequired": "请输入大于或等于零的销售价格。",
@@ -1380,21 +1434,66 @@
   },
   "priceRule": {
     "title": "新增价格规则",
+    "editTitle": "编辑价格规则",
+    "listTitle": "价格规则",
+    "addTitle": "新增价格规则",
     "subtitle": "为可销售产品设置指定时段的折扣。",
+    "listSubtitle": "管理可销售产品的 scheduled discounts 与促销活动。",
     "ruleName": "规则名称",
+    "slogan": "宣传标语",
+    "sloganPlaceholder": "例如：周末特惠",
     "product": "产品",
+    "discount": "折扣",
     "discountType": "折扣类型",
     "discountValue": "折扣值",
+    "baseUnit": "最小单位",
+    "roundingMode": "取舍方式",
+    "period": "有效期",
+    "from": "自",
+    "to": "至",
     "startAt": "开始时间",
     "endAt": "结束时间",
     "priority": "优先级",
+    "status": "状态",
+    "publish": "发布",
+    "edit": "编辑",
+    "delete": "删除",
+    "loading": "正在加载价格规则...",
     "loadingProducts": "正在加载可销售产品...",
     "productsUnavailable": "无法加载可销售产品。价格规则需要可用的产品目录。",
     "createFailed": "无法新增价格规则。",
+    "updateFailed": "无法更新价格规则。",
+    "loadFailed": "无法加载价格规则，请重试。",
+    "publishFailed": "无法发布价格规则。",
+    "deleteFailed": "无法删除价格规则。",
     "created": "价格规则 {{ruleId}} 已建立，状态为 {{status}}。",
+    "updated": "价格规则 {{ruleId}} 已更新，状态为 {{status}}。",
+    "confirmPublishTitle": "发布价格规则",
+    "confirmPublish": "确定要发布价格规则「{{ruleName}}」吗？",
+    "confirmDeleteTitle": "删除价格规则",
+    "confirmDelete": "确定要删除价格规则「{{ruleName}}」吗？",
+    "searchPlaceholder": "搜索价格规则...",
+    "noData": "暂无价格规则",
+    "noDataDescription": "新增价格规则以为可销售产品设置折扣或促销活动。",
+    "noSearchResults": "没有匹配搜索条件的价格规则。",
+    "status": {
+      "DRAFT": "草稿",
+      "ACTIVE": "生效中",
+      "PENDING_APPROVAL": "待审批"
+    },
     "discountTypes": {
       "PERCENT": "百分比",
       "FIXED_AMOUNT": "固定金额"
+    },
+    "baseUnits": {
+      "CENT": "分 (0.01)",
+      "TEN_CENT": "角 (0.10)",
+      "DOLLAR": "元 (1.00)"
+    },
+    "roundingModes": {
+      "UP": "向上进位",
+      "HALF_UP": "四舍五入",
+      "FLOOR": "向下舍去"
     },
     "validation": {
       "ruleNameRequired": "请输入规则名称。",
@@ -1419,6 +1518,26 @@
     "skuRequired": "请选择可销售产品。",
     "generateFailed": "无法生成 SKU 标签。",
     "downloadFailed": "无法下载已生成的标签。"
+  },
+  "productFormat": {
+    "title": "产品形态",
+    "subtitle": "管理可用于产品及配方的可销售形态。",
+    "addTitle": "添加产品形态",
+    "editTitle": "编辑产品形态",
+    "formatCode": "形态编码",
+    "formatName": "形态名称",
+    "active": "启用",
+    "searchPlaceholder": "搜索产品形态...",
+    "noData": "暂无产品形态",
+    "noDataDescription": "添加如整果、鲜切、果汁等产品形态，以便在产品及转换配方中使用。",
+    "noSearchResults": "没有匹配搜索条件的产品形态。",
+    "helpTitle": "产品形态 — 用户手册",
+    "helpBody": "产品形态是产品及转换配方共享的参考值。\n\n• 形态编码 — 系统中存储的唯一大写标识符（如 WHOLE）。\n• 形态名称 — 下拉框及目录中显示的描述标签（如 整果）。\n• 启用 — 停用的形态不会出现在新建产品下拉框中，但现有数据仍可引用。",
+    "loadFailed": "无法加载产品形态，请重试。",
+    "saveFailed": "保存产品形态失败。",
+    "formatCodeRequired": "请输入形态编码。",
+    "formatCodeInvalid": "形态编码只能包含大写字母、数字和下划线。",
+    "formatNameRequired": "请输入形态名称。"
   },
   "purchaseLot": {
     "title": "采购批次收货",
@@ -1474,11 +1593,15 @@
   },
   "staffCheckout": {
     "title": "员工结账",
-    "subtitle": "建立购物车、获取权威报价并发起结账。",
+    "subtitle": "浏览产品、建立购物车、核对服务器报价并完成结账。",
     "storeId": "门店编号",
     "channel": "渠道",
     "customerId": "顾客编号（选填）",
     "createCart": "建立购物车",
+    "getQuote": "核对购物车并获取报价",
+    "retryQuote": "重试获取报价",
+    "quoteReady": "报价已就绪",
+    "newOrder": "开始新订单",
     "cartCreated": "购物车 {{cartId}} 状态为 {{state}}。",
     "product": "可销售产品",
     "quantity": "数量",
@@ -1746,6 +1869,7 @@
       },
       "empty": "购物车是空的",
       "emptyDescription": "浏览产品并添加商品到购物车。",
+      "removeItem": "从购物车移除 {{product}}",
       "checkout": "结账",
       "totalItems": "{{count}} 件商品"
     },

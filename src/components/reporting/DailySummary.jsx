@@ -1,23 +1,18 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
-  FormControl,
   Grid,
-  InputLabel,
-  MenuItem,
-  Select,
   TextField,
   Typography,
 } from "@mui/material";
 import { Assessment as AssessmentIcon, Refresh as RefreshIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { PageHeader, LoadingState, EmptyState } from "../common";
-import { AuthContext } from "../../context/authContext";
-import { listStores } from "../../helpers/store_helper";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { getDailySummary } from "../../helpers/reporting_helper";
 
 function formatMoney(money) {
@@ -28,38 +23,11 @@ function formatMoney(money) {
 
 export default function DailySummary() {
   const { t } = useTranslation();
-  const { userInfo } = useContext(AuthContext);
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const response = await listStores({ companyId: userInfo?.companyId, active: true });
-        const items = Array.isArray(response.data?.items)
-          ? response.data.items
-          : Array.isArray(response.data) ? response.data : [];
-        if (!active) return;
-        setStores(items);
-        if (items.length === 1) {
-          setSelectedStoreId(String(items[0].storeId || items[0].id || ""));
-        }
-      } catch (err) {
-        if (!active) return;
-        setError(err?.response?.data?.message || t("dailySummary.loadStoresFailed"));
-      }
-    };
-
-    load();
-    return () => {
-      active = false;
-    };
-  }, [t, userInfo?.companyId]);
 
   const loadSummary = async () => {
     if (!selectedStoreId || !date) {
@@ -101,21 +69,6 @@ export default function DailySummary() {
       />
 
       <Box sx={{ mb: 3, display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-        <FormControl sx={{ minWidth: 240 }} size="small">
-          <InputLabel id="daily-summary-store-label">{t("dailySummary.store")}</InputLabel>
-          <Select
-            labelId="daily-summary-store-label"
-            value={selectedStoreId}
-            label={t("dailySummary.store")}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-          >
-            {stores.map((store) => (
-              <MenuItem key={store.storeId || store.id} value={String(store.storeId || store.id)}>
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <TextField
           type="date"
           size="small"

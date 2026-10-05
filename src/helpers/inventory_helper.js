@@ -1,5 +1,7 @@
 import { request } from "./axios_helper";
 
+const API_BASE = "/api";
+
 /**
  * Fetch authoritative inventory snapshots for a store.
  *
@@ -24,5 +26,5 @@ export const listInventorySnapshots = ({
   query.set("page", String(page));
   query.set("pageSize", String(pageSize));
 
-  return request("GET", `/api/v1/inventory/snapshots?${query.toString()}`);
+  return request("GET", `${API_BASE}/inventory/snapshots?${query.toString()}`);
 };

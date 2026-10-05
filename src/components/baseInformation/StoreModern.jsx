@@ -29,15 +29,15 @@ import { listStores, deleteStore } from "../../helpers/store_api";
 import StoreForm from "./StoreForm";
 
 const normalizeStore = (item) => ({
-  id: item.storeId || item.id,
-  storeId: item.storeId || item.id,
-  storeName: item.storeName || item.name,
+  id: item.storeId,
+  storeId: item.storeId,
+  storeName: item.storeName,
   companyId: item.companyId,
   timezone: item.timezone,
   address: item.address,
   latitude: item.latitude,
   longitude: item.longitude,
-  active: item.active !== false,
+  active: item.active,
 });
 
 const StoreModern = () => {

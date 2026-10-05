@@ -304,7 +304,7 @@ api.interceptors.response.use(
       try {
         // Try refresh endpoint (server should use HttpOnly refresh cookie)
         const refreshRes = await axios.post(
-          `${API_BASE_URL}/api/v1/auth/session/refresh`,
+          `${API_BASE_URL}/api/auth/session/refresh`,
           null,
           { withCredentials: true },
         );

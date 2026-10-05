@@ -31,7 +31,7 @@ const StaffAdd = ({ onCancel }) => {
   const { t } = useTranslation();
   const { userInfo } = useContext(AuthContext);
   const userCompanyId = userInfo?.companyId || "";
-  const userLevel = userInfo?.userLevel || userInfo?.level || 0;
+  const userLevel = userInfo?.userLevel ?? 0;
   const isUserLevelNine = userLevel === 9 || userLevel === "9";
 
   const [form, setForm] = useState({

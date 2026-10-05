@@ -31,8 +31,8 @@ import TvBootstrap from "./tv/TvBootstrap.jsx";
 import PdaAccessHome from "./pda/PdaAccessHome.jsx";
 import PdaLayout from "./pda/PdaLayout.jsx";
 import PdaMe from "./pda/PdaMe.jsx";
-import PlaceholderPage from "./common/PlaceholderPage.jsx";
-import { ShoppingCart as CheckoutIcon } from "@mui/icons-material";
+import StaffCheckout from "./checkout/StaffCheckout.jsx";
+import StoreScope from "./common/StoreScope.jsx";
 import TvDisplayHome from "./tv/TvDisplayHome.jsx";
 import CustomerShell from "./customer/CustomerShell.jsx";
 
@@ -254,7 +254,7 @@ export default function AppContent() {
       {location.pathname.startsWith("/tv") ? (
         <Routes>
           <Route path="/tv/start" element={<TvBootstrap />} />
-          <Route path="/tv/projects" element={<TvDisplayHome />} />
+          <Route path="/tv/projects" element={<StoreScope><TvDisplayHome /></StoreScope>} />
           <Route path="/tv" element={<Navigate to="/tv/start" replace />} />
           <Route path="/tv/*" element={<Navigate to="/tv/start" replace />} />
         </Routes>
@@ -267,11 +267,9 @@ export default function AppContent() {
             <Route
               path="checkout"
               element={
-                <PlaceholderPage
-                  titleKey="placeholder.assistedCheckoutTitle"
-                  descriptionKey="placeholder.assistedCheckoutDescription"
-                  icon={CheckoutIcon}
-                />
+                <StoreScope>
+                  <StaffCheckout pdaMode />
+                </StoreScope>
               }
             />
             <Route path="me" element={<PdaMe />} />

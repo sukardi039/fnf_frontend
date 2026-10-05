@@ -2,6 +2,36 @@
 
 This document maps the implemented frontend features to their menu sections across the three user surfaces.
 
+## GPS-first store selection
+
+The dashboard, inventory operations, staff checkout, customer cart checkout,
+transformation batches/approvals, daily summary, reconciliation and TV dashboard
+identify their store from a fresh device GPS location before loading store data.
+The nearest active store with valid latitude/longitude is selected only when it
+is within **100 metres**, inclusive. The authenticated session's assigned store
+and a single-store list are not used as automatic substitutes for GPS.
+
+When GPS is unsupported, denied, times out, is unavailable, or finds no store
+within that radius, the screen explains the failure and offers manual selection
+from the active store list. Failed store-list requests are shown explicitly with
+a retry; they cannot be replaced by an arbitrary typed store ID. Retrying GPS
+clears the selection. Changing stores remounts the operational screen so previous
+store data, forms, carts and results are not reused for another store.
+
+Store administration remains unrestricted. Company scoping and backend
+authorization still apply; GPS selection is not an authorization mechanism.
+Browsers require location permission and a secure context (HTTPS or localhost).
+
+## Shared checkout browse/cart experience
+
+Customer mobile, web checkout and PDA checkout use the shared `ProductCatalog`
+and `CheckoutCartItems` components for product search, product cards, quantity
+selection, cart review, quantity changes and item removal. Order creation still
+uses the channel selected or allowed by that surface: customer mobile sends
+`MOBILE_ORDER`, web checkout can select a channel, and PDA checkout is fixed to
+`STAFF_ASSISTED`. Store scope, customer identity, payment choices, server quotes
+and backend authorization remain specific to each flow.
+
 ## Web System (`/src/layouts/components/Sidebar.jsx`)
 
 ### Base Setup & Administration
@@ -23,7 +53,9 @@ This document maps the implemented frontend features to their menu sections acro
 | Function                      | Route                      | Menu Section |
 | ----------------------------- | -------------------------- | ------------ |
 | Product Catalog (create/edit) | `/product`                 | Catalog      |
-| Price Rules                   | `/price-rules/new`         | Catalog      |
+| Price Rules (list)            | `/price-rules`             | Catalog      |
+| Price Rules (create/edit)     | `/price-rules/new`         | Catalog      |
+| Price Rules (edit)            | `/price-rules/edit`        | Catalog      |
 | SKU Label Generator           | `/catalog/labels`          | Catalog      |
 | UOM List                      | `/catalog/uoms`            | Catalog      |
 | UOM Conversions               | `/catalog/uom-conversions` | Catalog      |
@@ -68,6 +100,7 @@ Bottom navigation tabs:
 | Tab    | Route       | Function                                                                       |
 | ------ | ----------- | ------------------------------------------------------------------------------ |
 | Verify | `/pda/home` | Scan collection token, resolve transaction, confirm handover (`PdaAccessHome`) |
+| Checkout | `/pda/checkout` | GPS-scoped staff-assisted checkout: create a cart, add products, review the authoritative quote, and initiate payment |
 | Me     | `/pda/me`   | PDA user profile and logout (`PdaMe`)                                          |
 
 The PDA login gate is at `/pda/login` and is not part of the bottom navigation.

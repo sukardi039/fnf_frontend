@@ -24,11 +24,12 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { PageHeader, LoadingState, EmptyState } from "../common";
-import { request } from "../../helpers/axios_helper";
-import { approveTransformation } from "../../helpers/transformation_helper";
+import { approveTransformation, listTransformations } from "../../helpers/transformation_helper";
+import { useStoreLocation } from "../../context/storeLocationContext";
 
 export default function TransformationApprovalList() {
   const { t } = useTranslation();
+  const { storeId } = useStoreLocation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -42,14 +43,9 @@ export default function TransformationApprovalList() {
     setLoading(true);
     setError("");
     try {
-      const response = await request(
-        "GET",
-        "/api/v1/transformations?status=PENDING_APPROVAL",
-        null,
-        {
-          skipAuthRedirect: true,
-          skipBackendErrorDialog: true,
-        },
+      const response = await listTransformations(
+        { storeId, status: "PENDING_APPROVAL" },
+        { skipAuthRedirect: true, skipBackendErrorDialog: true },
       );
       setItems(Array.isArray(response.data?.items) ? response.data.items : []);
     } catch (err) {
@@ -66,14 +62,9 @@ export default function TransformationApprovalList() {
     const run = async () => {
       setLoading(true);
       try {
-        const response = await request(
-          "GET",
-          "/api/v1/transformations?status=PENDING_APPROVAL",
-          null,
-          {
-            skipAuthRedirect: true,
-            skipBackendErrorDialog: true,
-          },
+        const response = await listTransformations(
+          { storeId, status: "PENDING_APPROVAL" },
+          { skipAuthRedirect: true, skipBackendErrorDialog: true },
         );
         if (!active) return;
         setItems(
@@ -93,11 +84,11 @@ export default function TransformationApprovalList() {
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [t, storeId]);
 
   const normalizedRows = useMemo(
     () =>
-      items.map((item) => ({
+      items.filter((item) => item.storeId === storeId).map((item) => ({
         id: item.transformationId,
         transformationId: item.transformationId,
         recipeId: item.recipeId,
@@ -108,7 +99,7 @@ export default function TransformationApprovalList() {
         createdBy: item.createdBy,
         createdAt: item.createdAt,
       })),
-    [items],
+    [items, storeId],
   );
 
   const filteredRows = useMemo(() => {

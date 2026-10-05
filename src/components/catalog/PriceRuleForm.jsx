@@ -1,15 +1,35 @@
 import React, { useEffect, useState } from "react";
+import PropTypes from "prop-types";
 import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
-import { request } from "../../helpers/axios_helper";
+import {
+  createPriceRule,
+  fetchActiveProducts,
+  updatePriceRule,
+} from "./productApi";
 
 const DISCOUNT_TYPES = ["PERCENT", "FIXED_AMOUNT"];
+const BASE_UNITS = ["CENT", "TEN_CENT", "DOLLAR"];
+const ROUNDING_MODES = ["UP", "HALF_UP", "FLOOR"];
 
-const PriceRuleForm = () => {
+const toDatetimeLocal = (isoString) => {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  } catch {
+    return "";
+  }
+};
+
+const PriceRuleForm = ({ priceRule }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isEdit = Boolean(priceRule?.ruleId);
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,21 +38,43 @@ const PriceRuleForm = () => {
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
     ruleName: "",
+    slogan: "",
     skuId: "",
     discountType: "PERCENT",
     discountValue: "",
+    baseUnit: "CENT",
+    roundingMode: "HALF_UP",
     startAt: "",
     endAt: "",
     priority: "0",
   });
 
   useEffect(() => {
+    if (!isEdit) return;
+    setForm({
+      ruleName: priceRule.ruleName || "",
+      slogan: priceRule.slogan || "",
+      skuId: priceRule.skuId || "",
+      discountType: priceRule.discountType || "PERCENT",
+      discountValue:
+        priceRule.discountValue === undefined || priceRule.discountValue === null
+          ? ""
+          : String(priceRule.discountValue),
+      baseUnit: priceRule.baseUnit || "CENT",
+      roundingMode: priceRule.roundingMode || "HALF_UP",
+      startAt: toDatetimeLocal(priceRule.startAt),
+      endAt: toDatetimeLocal(priceRule.endAt),
+      priority:
+        priceRule.priority === undefined || priceRule.priority === null
+          ? "0"
+          : String(priceRule.priority),
+    });
+  }, [isEdit, priceRule]);
+
+  useEffect(() => {
     let active = true;
 
-    request("GET", "/api/products?active=true", null, {
-      skipAuthRedirect: true,
-      skipBackendErrorDialog: true,
-    })
+    fetchActiveProducts()
       .then((response) => {
         if (!active) return;
         setProducts(
@@ -90,36 +132,35 @@ const PriceRuleForm = () => {
 
     setSaving(true);
     setMessage("");
+    const payload = {
+      ruleName: form.ruleName.trim(),
+      slogan: form.slogan.trim(),
+      skuId: form.skuId,
+      discountType: form.discountType,
+      discountValue: Number(form.discountValue),
+      baseUnit: form.baseUnit,
+      roundingMode: form.roundingMode,
+      startAt: new Date(form.startAt).toISOString(),
+      endAt: new Date(form.endAt).toISOString(),
+      priority: Number(form.priority),
+    };
     try {
-      const response = await request(
-        "POST",
-        "/api/price-rules",
-        {
-          ruleName: form.ruleName.trim(),
-          skuId: form.skuId,
-          discountType: form.discountType,
-          discountValue: Number(form.discountValue),
-          startAt: new Date(form.startAt).toISOString(),
-          endAt: new Date(form.endAt).toISOString(),
-          priority: Number(form.priority),
-        },
-        {
-          headers: { "Idempotency-Key": crypto.randomUUID() },
-          skipAuthRedirect: true,
-          skipBackendErrorDialog: true,
-        },
-      );
+      const response = isEdit
+        ? await updatePriceRule(priceRule.ruleId, payload)
+        : await createPriceRule(payload);
       setMessageSeverity("success");
       setMessage(
-        t("priceRule.created", {
+        t(isEdit ? "priceRule.updated" : "priceRule.created", {
           ruleId: response.data.ruleId,
           status: response.data.status,
         }),
       );
+      setTimeout(() => navigate("/price-rules"), 600);
     } catch (requestError) {
       setMessageSeverity("error");
       setMessage(
-        requestError?.response?.data?.message || t("priceRule.createFailed"),
+        requestError?.response?.data?.message ||
+          t(isEdit ? "priceRule.updateFailed" : "priceRule.createFailed"),
       );
     } finally {
       setSaving(false);
@@ -133,10 +174,10 @@ const PriceRuleForm = () => {
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <HeaderBar
-        title={t("priceRule.title")}
+        title={t(isEdit ? "priceRule.editTitle" : "priceRule.title")}
         subtitle={t("priceRule.subtitle")}
         showBackButton
-        onBack={() => navigate("/product")}
+        onBack={() => navigate("/price-rules")}
         backLabel={t("basic.back")}
       />
 
@@ -162,6 +203,14 @@ const PriceRuleForm = () => {
           error={Boolean(errors.ruleName)}
           helperText={errors.ruleName}
           required
+          fullWidth
+        />
+        <TextField
+          label={t("priceRule.slogan")}
+          name="slogan"
+          value={form.slogan}
+          onChange={handleChange}
+          placeholder={t("priceRule.sloganPlaceholder")}
           fullWidth
         />
         <TextField
@@ -208,6 +257,36 @@ const PriceRuleForm = () => {
           fullWidth
         />
         <TextField
+          select
+          label={t("priceRule.baseUnit")}
+          name="baseUnit"
+          value={form.baseUnit}
+          onChange={handleChange}
+          required
+          fullWidth
+        >
+          {BASE_UNITS.map((unit) => (
+            <MenuItem key={unit} value={unit}>
+              {t(`priceRule.baseUnits.${unit}`)}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label={t("priceRule.roundingMode")}
+          name="roundingMode"
+          value={form.roundingMode}
+          onChange={handleChange}
+          required
+          fullWidth
+        >
+          {ROUNDING_MODES.map((mode) => (
+            <MenuItem key={mode} value={mode}>
+              {t(`priceRule.roundingModes.${mode}`)}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
           label={t("priceRule.startAt")}
           name="startAt"
           type="datetime-local"
@@ -249,12 +328,28 @@ const PriceRuleForm = () => {
         <Button type="submit" variant="contained" disabled={saving}>
           {t("basic.save")}
         </Button>
-        <Button variant="outlined" onClick={() => navigate("/product")}>
+        <Button variant="outlined" onClick={() => navigate("/price-rules")}>
           {t("basic.cancel")}
         </Button>
       </Box>
     </Box>
   );
+};
+
+PriceRuleForm.propTypes = {
+  priceRule: PropTypes.shape({
+    ruleId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    ruleName: PropTypes.string,
+    slogan: PropTypes.string,
+    skuId: PropTypes.string,
+    discountType: PropTypes.string,
+    discountValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    baseUnit: PropTypes.string,
+    roundingMode: PropTypes.string,
+    startAt: PropTypes.string,
+    endAt: PropTypes.string,
+    priority: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }),
 };
 
 export default PriceRuleForm;

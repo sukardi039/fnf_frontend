@@ -1,19 +1,21 @@
 import { request } from "./axios_helper";
 
+const API_BASE = "/api";
+
 export const listUoms = (params = {}) => {
   const query = new URLSearchParams();
   if (params.active !== undefined) query.set("active", String(params.active));
   const qs = query.toString();
-  return request("GET", `/api/v1/uoms${qs ? `?${qs}` : ""}`);
+  return request("GET", `${API_BASE}/uoms${qs ? `?${qs}` : ""}`);
 };
 
 export const createUom = (data) =>
-  request("POST", "/api/v1/uoms", data, {
+  request("POST", `${API_BASE}/uoms`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
   });
 
 export const updateUom = (uomId, data) =>
-  request("PUT", `/api/v1/uoms/${uomId}`, data, {
+  request("PUT", `${API_BASE}/uoms/${uomId}`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
   });
 
@@ -23,10 +25,10 @@ export const listUomConversions = (params = {}) => {
   if (params.toUom) query.set("toUom", params.toUom);
   if (params.active !== undefined) query.set("active", String(params.active));
   const qs = query.toString();
-  return request("GET", `/api/v1/uom-conversions${qs ? `?${qs}` : ""}`);
+  return request("GET", `${API_BASE}/uom-conversions${qs ? `?${qs}` : ""}`);
 };
 
 export const createUomConversion = (data) =>
-  request("POST", "/api/v1/uom-conversions", data, {
+  request("POST", `${API_BASE}/uom-conversions`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
   });

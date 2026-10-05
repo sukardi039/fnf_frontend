@@ -248,7 +248,7 @@ const renderPurchaseOrderPdf = ({ company, vendor, order, items, productMap }) =
 
   // Right block: vendor name and address
   currentY = poBlockStartY;
-  const vendorName = String(vendor?.vendorName || order?.vendorName || order?.vendorId || "-").trim();
+  const vendorName = String(vendor?.vendorName ?? "—").trim();
   const vendorAddress = parseAddressObject(vendor?.address);
   const vendorAddressLine = [vendorAddress.Line1, vendorAddress.Line2]
     .filter(Boolean)

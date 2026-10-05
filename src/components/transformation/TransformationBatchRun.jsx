@@ -23,18 +23,17 @@ import { Delete as DeleteIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
 import { AuthContext } from "../../context/authContext";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import {
   listTransformationRecipes,
   createTransformation,
 } from "../../helpers/transformation_helper";
 import { listInventorySnapshots } from "../../helpers/inventory_helper";
-import { listStores } from "../../helpers/store_helper";
 
 export default function TransformationBatchRun() {
   const { t } = useTranslation();
   const { userInfo } = useContext(AuthContext);
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [recipes, setRecipes] = useState([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [snapshots, setSnapshots] = useState([]);
@@ -54,29 +53,15 @@ export default function TransformationBatchRun() {
     const load = async () => {
       setLoading(true);
       try {
-        const [storesResponse, recipesResponse] = await Promise.all([
-          listStores({ companyId: userInfo?.companyId, active: true }),
-          listTransformationRecipes({
-            companyId: userInfo?.companyId,
-            active: true,
-          }),
-        ]);
-        const storeItems = Array.isArray(storesResponse.data?.items)
-          ? storesResponse.data.items
-          : Array.isArray(storesResponse.data)
-            ? storesResponse.data
-            : [];
+        const recipesResponse = await listTransformationRecipes({
+          companyId: userInfo?.companyId,
+          active: true,
+        });
         const recipeItems = Array.isArray(recipesResponse.data?.items)
           ? recipesResponse.data.items
           : [];
         if (!active) return;
-        setStores(storeItems);
         setRecipes(recipeItems);
-        if (storeItems.length === 1) {
-          setSelectedStoreId(
-            String(storeItems[0].storeId || storeItems[0].id || ""),
-          );
-        }
       } catch (err) {
         if (!active) return;
         setError(
@@ -282,26 +267,6 @@ export default function TransformationBatchRun() {
           maxWidth: 880,
         }}
       >
-        <FormControl fullWidth required>
-          <InputLabel id="batch-store-label">
-            {t("transformationBatch.store")}
-          </InputLabel>
-          <Select
-            labelId="batch-store-label"
-            value={selectedStoreId}
-            label={t("transformationBatch.store")}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-          >
-            {stores.map((store) => (
-              <MenuItem
-                key={store.storeId || store.id}
-                value={String(store.storeId || store.id)}
-              >
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <FormControl fullWidth required>
           <InputLabel id="batch-recipe-label">
             {t("transformationBatch.recipe")}

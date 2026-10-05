@@ -21,9 +21,11 @@ import ParameterModern from "./baseInformation/ParameterModern";
 import WASimulator from "./baseInformation/WASimulator";
 import ProductCatalog from "./catalog/ProductCatalog";
 import PriceRuleForm from "./catalog/PriceRuleForm";
+import PriceRuleList from "./catalog/PriceRuleList";
 import SkuLabelGenerator from "./catalog/SkuLabelGenerator";
 import UomList from "./catalog/UomList";
 import UomConversionList from "./catalog/UomConversionList";
+import ProductFormatList from "./catalog/ProductFormatList";
 import PurchaseLotReceive from "./inventory/PurchaseLotReceive";
 import LossEventForm from "./inventory/LossEventForm";
 import StockView from "./inventory/StockView";
@@ -38,6 +40,7 @@ import TransformationApprovalList from "./transformation/TransformationApprovalL
 import DailySummary from "./reporting/DailySummary";
 import Reconciliation from "./reporting/Reconciliation";
 import PlaceholderPage from "./common/PlaceholderPage";
+import StoreScope from "./common/StoreScope";
 import {
   Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
@@ -52,8 +55,8 @@ function MainPage() {
   return (
     <AdminLayout>
       <Routes>
-        <Route path="/" element={<AppHome />} />
-        <Route path="/home" element={<AppHome />} />
+        <Route path="/" element={<StoreScope><AppHome /></StoreScope>} />
+        <Route path="/home" element={<StoreScope><AppHome /></StoreScope>} />
         <Route path="/company" element={<CompanyModern />} />
         <Route path="/role" element={<RoleModern />} />
         <Route path="/staff" element={<StaffModern />} />
@@ -72,7 +75,9 @@ function MainPage() {
         <Route path="/parameter" element={<ParameterModern />} />
         <Route path="/wa-simulator" element={<WASimulator />} />
         <Route path="/product" element={<ProductCatalog />} />
+        <Route path="/price-rules" element={<PriceRuleList />} />
         <Route path="/price-rules/new" element={<PriceRuleForm />} />
+        <Route path="/price-rules/edit" element={<PriceRuleForm />} />
         <Route path="/catalog/labels" element={<SkuLabelGenerator />} />
         <Route path="/catalog/uoms" element={<UomList />} />
         <Route
@@ -80,12 +85,16 @@ function MainPage() {
           element={<UomConversionList />}
         />
         <Route
-          path="/inventory/lots/receive"
-          element={<PurchaseLotReceive />}
+          path="/catalog/product-formats"
+          element={<ProductFormatList />}
         />
-        <Route path="/inventory/loss-events/new" element={<LossEventForm />} />
-        <Route path="/inventory/stock-view" element={<StockView />} />
-        <Route path="/checkout/staff" element={<StaffCheckout />} />
+        <Route
+          path="/inventory/lots/receive"
+          element={<StoreScope><PurchaseLotReceive /></StoreScope>}
+        />
+        <Route path="/inventory/loss-events/new" element={<StoreScope><LossEventForm /></StoreScope>} />
+        <Route path="/inventory/stock-view" element={<StoreScope><StockView /></StoreScope>} />
+        <Route path="/checkout/staff" element={<StoreScope><StaffCheckout /></StoreScope>} />
         <Route path="/checkout/refunds/new" element={<RefundRequestForm />} />
         <Route
           path="/checkout/refunds/approve"
@@ -101,18 +110,18 @@ function MainPage() {
         />
         <Route
           path="/transformations/batches"
-          element={<TransformationList />}
+          element={<StoreScope><TransformationList /></StoreScope>}
         />
         <Route
           path="/transformations/batches/new"
-          element={<TransformationBatchRun />}
+          element={<StoreScope><TransformationBatchRun /></StoreScope>}
         />
         <Route
           path="/transformations/approvals"
-          element={<TransformationApprovalList />}
+          element={<StoreScope><TransformationApprovalList /></StoreScope>}
         />
-        <Route path="/reports/daily-summary" element={<DailySummary />} />
-        <Route path="/reports/reconciliation" element={<Reconciliation />} />
+        <Route path="/reports/daily-summary" element={<StoreScope><DailySummary /></StoreScope>} />
+        <Route path="/reports/reconciliation" element={<StoreScope><Reconciliation /></StoreScope>} />
         <Route
           path="/inventory/loss-approvals"
           element={

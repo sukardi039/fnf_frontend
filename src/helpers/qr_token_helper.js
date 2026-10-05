@@ -24,10 +24,12 @@ export class QrTokenError extends Error {
  * @param {{ maxAgeMinutes?: number, noTimeScope?: boolean }} [options]
  * @returns {Promise<string>} compact signed QR token
  */
+const API_BASE = "/api";
+
 export async function issueQrToken(entityId, options = {}) {
   const response = await request(
     "POST",
-    "/api/v1/qr-tokens",
+    `${API_BASE}/qr-tokens`,
     {
       entityId: String(entityId).trim(),
       maxAgeMinutes: options.maxAgeMinutes,
@@ -59,7 +61,7 @@ export async function issueQrToken(entityId, options = {}) {
 export async function resolveQrToken(qrPayload) {
   const response = await request(
     "POST",
-    "/api/v1/labels/resolve-qr",
+    `${API_BASE}/labels/resolve-qr`,
     { qrPayload: String(qrPayload) },
     {
       skipAuthRedirect: true,

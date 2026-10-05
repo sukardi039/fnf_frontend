@@ -56,6 +56,20 @@
     "sample3Time": "2 hours ago",
     "viewAll": "View all notifications"
   },
+  "storeLocation": {
+    "locating": "Identifying your store using GPS...",
+    "detected": "GPS store: {{store}} ({{distance}} metres away)",
+    "manualStore": "Select a store manually",
+    "manualHelp": "Manual fallback is available because GPS could not identify a store.",
+    "retry": "Retry GPS store lookup",
+    "permissionDenied": "Location permission was denied. Allow location access or select a store manually.",
+    "timeout": "GPS lookup timed out. Retry or select a store manually.",
+    "unsupported": "This device does not support GPS location. Select a store manually.",
+    "unavailable": "Your GPS location is unavailable. Retry or select a store manually.",
+    "noNearby": "No active store with valid GPS coordinates was found within {{radius}} metres. Select a store manually.",
+    "loadFailed": "The store list could not be loaded. Retry to identify your store.",
+    "invalidStores": "The backend returned an invalid store list."
+  },
   "dashboard": {
     "welcome": "Welcome Back",
     "subtitle": "Hello, here's what's happening today",
@@ -78,6 +92,44 @@
       "userAdded": "New user added",
       "customerUpdated": "Customer updated",
       "companyCreated": "Company created"
+    },
+    "discount": {
+      "title": "Today's Promotions",
+      "subtitle": "Active and upcoming discounts",
+      "loading": "Loading promotions...",
+      "empty": "No active promotions for today or the next 2 days.",
+      "today": "Today",
+      "upcoming": "Upcoming",
+      "todayCount": "Today: {{count}}",
+      "upcomingCount": "Upcoming: {{count}}",
+      "placeholderTitle": "Promotions Snapshot",
+      "placeholderSubtitle": "More promotion insights coming soon."
+    },
+    "sales": {
+      "title": "Sales Today",
+      "subtitle": "Sales, shrinkage and recovery for this store today",
+      "loading": "Loading sales...",
+      "loadFailed": "Sales data could not be loaded.",
+      "totalQuantity": "Qty: {{count}}",
+      "totalValue": "Value: {{value}}",
+      "quantity": "Quantity",
+      "value": "Value",
+      "topProducts": "Top 5 Products",
+      "noProducts": "No product sales recorded yet today.",
+      "noTrendData": "No hourly sales data available.",
+      "qty": "Qty: {{count}}"
+    },
+    "inventory": {
+      "title": "Inventory Status",
+      "subtitle": "Current stock levels and low stock alerts",
+      "loading": "Loading inventory...",
+      "loadFailed": "Inventory data could not be loaded.",
+      "noStore": "No store is assigned to your session.",
+      "totalSkus": "SKUs: {{count}}",
+      "lowStock": "Low stock: {{count}}",
+      "outOfStock": "Out of stock: {{count}}",
+      "lowStockItems": "Top Low Stock Items",
+      "noLowStock": "No low stock items."
     }
   },
   "welcome": {
@@ -121,6 +173,9 @@
     "qrLoginDomainMismatch": "This QR login link is not valid for this app. Please scan a QR code from the same domain."
   },
   "pda": {
+    "checkout": {
+      "staffAssisted": "Staff-assisted sale at the GPS-identified store. Add products, review the server quote, then collect payment or open the payment link."
+    },
     "login": {
       "missingKey": "Login key is missing. Please use a valid PDA login URL.",
       "expired": "This PDA login link is expired or invalid. Please scan a new QR code.",
@@ -386,6 +441,8 @@
   "basic": {
     "true": "True",
     "false": "False",
+    "yes": "Yes",
+    "no": "No",
     "actions": "Actions",
     "add": "Add",
     "save": "Save",
@@ -527,6 +584,7 @@
     "refundApproval": "Approve Refund",
     "uoms": "UOMs",
     "uomConversions": "Conversions",
+    "productFormats": "Product Formats",
     "lossApprovals": "Loss Approvals",
     "inventoryMovements": "Inventory Movements",
     "paymentDashboard": "Payment Dashboard",
@@ -1331,6 +1389,7 @@
     "description": "Description",
     "descriptionPlaceholder": "Product description",
     "image": "Upload Image",
+    "productPicture": "Product Picture",
     "categoryError": "Category must be 'A' or 'C'",
     "categoryA": "Asset",
     "categoryC": "Consumable",
@@ -1347,11 +1406,6 @@
     "active": "Active for sale",
     "formSubtitle": "Define the sellable product details used by the FnF catalog.",
     "writeBackendPending": "The product create API is not available yet. Your entries were validated but were not saved.",
-    "formats": {
-      "WHOLE": "Whole fruit",
-      "CUT": "Cut fruit",
-      "JUICE": "Juice"
-    },
     "validation": {
       "nameRequired": "Product name is required.",
       "priceRequired": "Enter a selling price of zero or greater."
@@ -1387,21 +1441,66 @@
   },
   "priceRule": {
     "title": "Create Price Rule",
+    "editTitle": "Edit Price Rule",
+    "listTitle": "Price Rules",
+    "addTitle": "Add Price Rule",
     "subtitle": "Schedule a discount for an active sellable product.",
+    "listSubtitle": "Manage scheduled discounts and promotions for sellable products.",
     "ruleName": "Rule Name",
+    "slogan": "Slogan",
+    "sloganPlaceholder": "e.g. Weekend special promotion",
     "product": "Product",
+    "discount": "Discount",
     "discountType": "Discount Type",
     "discountValue": "Discount Value",
+    "baseUnit": "Base Unit",
+    "roundingMode": "Rounding Mode",
+    "period": "Period",
+    "from": "From",
+    "to": "to",
     "startAt": "Starts At",
     "endAt": "Ends At",
     "priority": "Priority",
+    "status": "Status",
+    "publish": "Publish",
+    "edit": "Edit",
+    "delete": "Delete",
+    "loading": "Loading price rules...",
     "loadingProducts": "Loading active products...",
     "productsUnavailable": "Active products could not be loaded. Price rules require an available product catalog.",
     "createFailed": "The price rule could not be created.",
+    "updateFailed": "The price rule could not be updated.",
+    "loadFailed": "Price rules could not be loaded. Please try again.",
+    "publishFailed": "The price rule could not be published.",
+    "deleteFailed": "The price rule could not be deleted.",
     "created": "Price rule {{ruleId}} was created with status {{status}}.",
+    "updated": "Price rule {{ruleId}} was updated with status {{status}}.",
+    "confirmPublishTitle": "Publish Price Rule",
+    "confirmPublish": "Are you sure you want to publish the price rule \"{{ruleName}}\"?",
+    "confirmDeleteTitle": "Delete Price Rule",
+    "confirmDelete": "Are you sure you want to delete the price rule \"{{ruleName}}\"?",
+    "searchPlaceholder": "Search price rules...",
+    "noData": "No price rules yet",
+    "noDataDescription": "Create a price rule to schedule discounts or promotions for active products.",
+    "noSearchResults": "No price rules match your search.",
+    "status": {
+      "DRAFT": "Draft",
+      "ACTIVE": "Active",
+      "PENDING_APPROVAL": "Pending Approval"
+    },
     "discountTypes": {
       "PERCENT": "Percentage",
       "FIXED_AMOUNT": "Fixed amount"
+    },
+    "baseUnits": {
+      "CENT": "Cent (0.01)",
+      "TEN_CENT": "10 Cents (0.10)",
+      "DOLLAR": "Dollar (1.00)"
+    },
+    "roundingModes": {
+      "UP": "Round up",
+      "HALF_UP": "4/5 rounding",
+      "FLOOR": "Floor"
     },
     "validation": {
       "ruleNameRequired": "Rule name is required.",
@@ -1426,6 +1525,26 @@
     "skuRequired": "Select an active product.",
     "generateFailed": "The SKU label could not be generated.",
     "downloadFailed": "The generated label could not be downloaded."
+  },
+  "productFormat": {
+    "title": "Product Formats",
+    "subtitle": "Manage the sellable formats available for products and recipes.",
+    "addTitle": "Add Product Format",
+    "editTitle": "Edit Product Format",
+    "formatCode": "Format Code",
+    "formatName": "Format Name",
+    "active": "Active",
+    "searchPlaceholder": "Search formats...",
+    "noData": "No product formats yet",
+    "noDataDescription": "Add product formats such as Whole, Cut, or Juice to use in products and transformation recipes.",
+    "noSearchResults": "No formats match your search.",
+    "helpTitle": "Product Formats — User Manual",
+    "helpBody": "Product formats are shared reference values used by products and transformation recipes.\n\n• Format Code — unique uppercase identifier stored in the system (e.g. WHOLE).\n• Format Name — display label shown in dropdowns and catalogs (e.g. Whole fruit).\n• Active — inactive formats are hidden from product creation dropdowns but remain available for existing data.",
+    "loadFailed": "Product formats could not be loaded. Please try again.",
+    "saveFailed": "Failed to save product format.",
+    "formatCodeRequired": "Format code is required.",
+    "formatCodeInvalid": "Format code may only contain uppercase letters, numbers, and underscores.",
+    "formatNameRequired": "Format name is required."
   },
   "purchaseLot": {
     "title": "Receive Purchase Lot",
@@ -1481,11 +1600,15 @@
   },
   "staffCheckout": {
     "title": "Staff Checkout",
-    "subtitle": "Create a cart, request authoritative quotes, and initiate checkout.",
+    "subtitle": "Browse products, build a cart, review the server quote, and complete checkout.",
     "storeId": "Store ID",
     "channel": "Channel",
     "customerId": "Customer ID (optional)",
     "createCart": "Create Cart",
+    "getQuote": "Review Cart & Get Quote",
+    "retryQuote": "Retry Quote",
+    "quoteReady": "Quote Ready",
+    "newOrder": "Start New Order",
     "cartCreated": "Cart {{cartId}} is {{state}}.",
     "product": "Active Product",
     "quantity": "Quantity",
@@ -1753,6 +1876,7 @@
       },
       "empty": "Your cart is empty",
       "emptyDescription": "Browse products to add items to your cart.",
+      "removeItem": "Remove {{product}} from cart",
       "checkout": "Checkout",
       "totalItems": "{{count}} items"
     },

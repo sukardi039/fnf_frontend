@@ -57,6 +57,7 @@ import {
   Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
   Payment as PaymentIcon,
+  Style as StyleIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -113,6 +114,12 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               label: t("menu.stockMovementCode"),
               icon: <AutoStoriesIcon fontSize="small" />,
               path: "/stockmovementcode",
+            },
+            {
+              key: "productFormats",
+              label: t("menu.productFormats", "Product Formats"),
+              icon: <StyleIcon fontSize="small" />,
+              path: "/catalog/product-formats",
             },
           ],
         },
@@ -256,7 +263,7 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
               key: "priceRules",
               label: t("menu.priceRules"),
               icon: <PercentIcon fontSize="small" />,
-              path: "/price-rules/new",
+              path: "/price-rules",
             },
             {
               key: "skuLabels",
@@ -650,8 +657,11 @@ const Sidebar = ({ open, onClose, collapsed, onToggleCollapse }) => {
         "/forced-password",
         "/wa-simulator",
         "/product",
+        "/price-rules",
         "/price-rules/new",
+        "/price-rules/edit",
         "/catalog/labels",
+        "/catalog/product-formats",
         "/inventory/lots/receive",
         "/inventory/loss-events/new",
         "/inventory/loss-approvals",

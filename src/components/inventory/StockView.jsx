@@ -1,16 +1,12 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
   Box,
   Chip,
   Collapse,
-  FormControl,
   IconButton,
   InputAdornment,
-  InputLabel,
-  MenuItem,
-  Select,
   TextField,
   Typography,
 } from "@mui/material";
@@ -19,61 +15,24 @@ import {
   Search as SearchIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  Store as StoreIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import PageHeader from "../common/PageHeader";
 import EmptyState from "../common/EmptyState";
 import LoadingState from "../common/LoadingState";
 import HelpDialog from "../common/HelpDialog";
-import { AuthContext } from "../../context/authContext";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { listInventorySnapshots } from "../../helpers/inventory_helper";
-import { listStores } from "../../helpers/store_helper";
 
 export default function StockView() {
   const { t } = useTranslation();
-  const { userInfo } = useContext(AuthContext);
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [helpOpen, setHelpOpen] = useState(false);
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
-  const [loadingStores, setLoadingStores] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    const loadStores = async () => {
-      setLoadingStores(true);
-      try {
-        const response = await listStores({
-          companyId: userInfo?.companyId,
-          active: true,
-        });
-        const items = Array.isArray(response.data?.items)
-          ? response.data.items
-          : Array.isArray(response.data)
-            ? response.data
-            : [];
-        if (!active) return;
-        setStores(items);
-        if (items.length === 1) {
-          setSelectedStoreId(String(items[0].storeId || items[0].id || ""));
-        }
-      } catch {
-        // best-effort store list; user can still type storeId if needed
-      } finally {
-        if (active) setLoadingStores(false);
-      }
-    };
-
-    loadStores();
-    return () => {
-      active = false;
-    };
-  }, [userInfo?.companyId]);
 
   useEffect(() => {
     let active = true;
@@ -302,30 +261,6 @@ export default function StockView() {
           flexWrap: "wrap",
         }}
       >
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel id="stock-view-store-label">
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              <StoreIcon fontSize="small" />
-              {t("stockView.store")}
-            </Box>
-          </InputLabel>
-          <Select
-            labelId="stock-view-store-label"
-            value={selectedStoreId}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-            label={t("stockView.store")}
-            disabled={loadingStores}
-          >
-            {stores.map((store) => (
-              <MenuItem
-                key={store.storeId || store.id}
-                value={String(store.storeId || store.id)}
-              >
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <TextField
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -342,16 +277,6 @@ export default function StockView() {
           }}
         />
       </Box>
-
-      {!selectedStoreId && !loadingStores && (
-        <EmptyState
-          title={t("stockView.noData")}
-          description={t(
-            "stockView.selectStoreDescription",
-            "Select a store to view inventory.",
-          )}
-        />
-      )}
 
       {selectedStoreId && loading ? (
         <LoadingState message={t("common.loading")} />

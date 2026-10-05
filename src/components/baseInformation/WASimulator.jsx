@@ -62,7 +62,7 @@ const WASimulator = () => {
   const { t } = useTranslation();
   const { userInfo } = useContext(AuthContext);
   const scrollEndRef = useRef(null);
-  const userLevel = userInfo?.userLevel || userInfo?.level || 0;
+  const userLevel = userInfo?.userLevel ?? 0;
   const isUserLevelNine = userLevel === 9 || userLevel === "9";
   const userCompanyId = userInfo?.companyId || "";
 

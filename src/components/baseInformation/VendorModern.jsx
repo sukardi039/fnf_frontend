@@ -29,13 +29,13 @@ import { listVendors, deleteVendor } from "../../helpers/vendor_api";
 import VendorForm from "./VendorForm";
 
 const normalizeVendor = (item) => ({
-  id: item.vendorId || item.id,
-  vendorId: item.vendorId || item.id,
-  vendorName: item.vendorName || item.name,
+  id: item.vendorId,
+  vendorId: item.vendorId,
+  vendorName: item.vendorName,
   contactName: item.contactName,
   email: item.email,
   phone: item.phone,
-  active: item.active !== false,
+  active: item.active,
 });
 
 const VendorModern = () => {

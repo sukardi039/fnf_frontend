@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -13,7 +13,11 @@ import {
   Edit as EditIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { listProducts } from "./productApi";
+import {
+  getDisplayImageInfo,
+  ThumbnailImg,
+} from "../../helpers/file_helper";
+import { fetchProductFormats, listProducts } from "./productApi";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
 import {
   BlockListItem,
@@ -23,28 +27,35 @@ import {
   PageHeader,
 } from "../common";
 import HelpDialog from "../common/HelpDialog";
-import { AuthContext } from "../../context/authContext";
 import ProductForm from "./ProductForm";
 
 const ProductCatalog = () => {
   const { t } = useTranslation();
   const { shouldUseBlockLayout } = useResponsiveLayout();
   const [products, setProducts] = useState([]);
+  const [formats, setFormats] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const { userInfo } = useContext(AuthContext);
 
   const loadProducts = async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await listProducts();
+      const [productsResponse, formatsResponse] = await Promise.all([
+        listProducts(),
+        fetchProductFormats(undefined),
+      ]);
       setProducts(
-        Array.isArray(response.data?.items) ? response.data.items : [],
+        Array.isArray(productsResponse.data?.items)
+          ? productsResponse.data.items
+          : [],
+      );
+      setFormats(
+        Array.isArray(formatsResponse.data) ? formatsResponse.data : [],
       );
     } catch (requestError) {
       if (requestError?.response?.status === 401) {
@@ -64,10 +75,18 @@ const ProductCatalog = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const response = await listProducts();
+        const [productsResponse, formatsResponse] = await Promise.all([
+          listProducts(),
+          fetchProductFormats(undefined),
+        ]);
         if (!active) return;
         setProducts(
-          Array.isArray(response.data?.items) ? response.data.items : [],
+          Array.isArray(productsResponse.data?.items)
+            ? productsResponse.data.items
+            : [],
+        );
+        setFormats(
+          Array.isArray(formatsResponse.data) ? formatsResponse.data : [],
         );
       } catch (requestError) {
         if (!active) return;
@@ -89,6 +108,15 @@ const ProductCatalog = () => {
     };
   }, [t]);
 
+  const formatByCode = useMemo(
+    () =>
+      formats.reduce((acc, format) => {
+        acc[format.formatCode] = format;
+        return acc;
+      }, {}),
+    [formats],
+  );
+
   const rows = products.map((product) => ({
     productId: product.productId,
     skuId: product.skuId,
@@ -99,7 +127,8 @@ const ProductCatalog = () => {
     price: product.price,
     currency: product.currency,
     active: product.active,
-    displayFormat: t(`product.formats.${product.format}`),
+    productPicture: product.productPicture,
+    displayFormat: formatByCode[product.format]?.formatName ?? product.format,
     displayPrice: `${product.currency} ${product.price}`,
     displayActive: t(`basic.${product.active}`),
   }));
@@ -111,6 +140,7 @@ const ProductCatalog = () => {
           product.productCode,
           product.productName,
           product.format,
+          product.displayFormat,
           product.uom,
           product.currency,
         ].some((value) =>
@@ -122,6 +152,62 @@ const ProductCatalog = () => {
     : rows;
 
   const columns = [
+    {
+      field: "productPicture",
+      headerName: t("product.productPicture", "Picture"),
+      width: 80,
+      align: "center",
+      headerAlign: "center",
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const imageInfo = params.value
+          ? getDisplayImageInfo(params.value)
+          : null;
+        const meta = imageInfo?.meta;
+        return (
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {meta?.id ? (
+              <ThumbnailImg
+                fileId={meta.id}
+                viewUrl={meta.viewUrl || ""}
+                provider={meta.provider || null}
+                width={40}
+                height={40}
+                alt={params.row.productName}
+                style={{ borderRadius: 4 }}
+              />
+            ) : imageInfo?.imageUrl ? (
+              <img
+                src={imageInfo.imageUrl}
+                alt={params.row.productName}
+                style={{
+                  width: 40,
+                  height: 40,
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+                onError={(event) => {
+                  event.target.style.display = "none";
+                }}
+              />
+            ) : (
+              <InventoryIcon
+                sx={{ color: "text.secondary", fontSize: "1.1rem" }}
+              />
+            )}
+          </Box>
+        );
+      },
+    },
     {
       field: "productName",
       headerName: t("product.productName"),
@@ -194,7 +280,6 @@ const ProductCatalog = () => {
   if (showAdd) {
     return (
       <ProductForm
-        companyId={String(userInfo?.companyId || "")}
         onCancel={(saved) => {
           setShowAdd(false);
           if (saved) loadProducts();
@@ -207,7 +292,6 @@ const ProductCatalog = () => {
     return (
       <ProductForm
         product={editingProduct}
-        companyId={String(userInfo?.companyId || "")}
         onCancel={(saved) => {
           setEditingProduct(null);
           if (saved) loadProducts();
@@ -285,11 +369,13 @@ const ProductCatalog = () => {
               columnDefs={blockColumnDefs}
               item={product}
               leadingMedia={{
+                field: "productPicture",
                 placeholder: (
                   <InventoryIcon
                     sx={{ color: "text.secondary", fontSize: "1.1rem" }}
                   />
                 ),
+                altFields: ["productName"],
                 width: 40,
                 height: 40,
               }}

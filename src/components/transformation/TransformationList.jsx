@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { DataGrid } from "@mui/x-data-grid";
 import { EmptyState, LoadingState, PageHeader } from "../common";
 import { listTransformations } from "../../helpers/transformation_helper";
+import { useStoreLocation } from "../../context/storeLocationContext";
 
 const STATUS_COLORS = {
   PENDING_APPROVAL: "warning",
@@ -15,6 +16,7 @@ const STATUS_COLORS = {
 
 export default function TransformationList() {
   const { t } = useTranslation();
+  const { storeId } = useStoreLocation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -25,7 +27,7 @@ export default function TransformationList() {
     const run = async () => {
       setLoading(true);
       try {
-        const response = await listTransformations();
+        const response = await listTransformations({ storeId });
         if (!active) return;
         setItems(
           Array.isArray(response.data?.items) ? response.data.items : [],
@@ -43,11 +45,11 @@ export default function TransformationList() {
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [t, storeId]);
 
   const normalizedRows = useMemo(
     () =>
-      items.map((item) => ({
+      items.filter((item) => item.storeId === storeId).map((item) => ({
         id: item.transformationId,
         transformationId: item.transformationId,
         recipeId: item.recipeId,
@@ -58,7 +60,7 @@ export default function TransformationList() {
         createdBy: item.createdBy,
         createdAt: item.createdAt,
       })),
-    [items],
+    [items, storeId],
   );
 
   const filteredRows = useMemo(() => {

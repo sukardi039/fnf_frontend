@@ -1,13 +1,15 @@
 import { request, setAuthHeader } from "./axios_helper";
 
+const API_BASE = "/api";
+
 export const registerCustomer = (data) =>
-  request("POST", "/api/v1/auth/customers/register", data, {
+  request("POST", `${API_BASE}/auth/customers/register`, data, {
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });
 
 export const loginCustomer = (data) =>
-  request("POST", "/api/v1/auth/customers/login", data, {
+  request("POST", `${API_BASE}/auth/customers/login`, data, {
     skipAuthRedirect: true,
     skipBackendErrorDialog: true,
   });

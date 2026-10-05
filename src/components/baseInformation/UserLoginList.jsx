@@ -213,7 +213,7 @@ const UserLoginList = () => {
         displayTimeLogin,
         displayLoginType: String(row.loginType || ""),
         displayFullName:
-          `${row.lastName || ""} ${row.firstName || ""}`.trim() || "-",
+          `${row.lastName ?? ""} ${row.firstName ?? ""}`.trim(),
       };
     });
   }, [rows]);
@@ -261,10 +261,10 @@ const UserLoginList = () => {
       const typeB = String(b.loginType || "").toLowerCase();
       if (typeA !== typeB) return typeA.localeCompare(typeB);
 
-      const nameA = `${a.lastName || ""} ${a.firstName || ""}`
+      const nameA = `${a.lastName ?? ""} ${a.firstName ?? ""}`
         .trim()
         .toLowerCase();
-      const nameB = `${b.lastName || ""} ${b.firstName || ""}`
+      const nameB = `${b.lastName ?? ""} ${b.firstName ?? ""}`
         .trim()
         .toLowerCase();
       return nameA.localeCompare(nameB);
@@ -362,7 +362,7 @@ const UserLoginList = () => {
             <MenuItem value="">{t("userLoginList.allUsers")}</MenuItem>
             {visibleUsers.map((u) => (
               <MenuItem key={u.id} value={u.id}>
-                {`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.login}
+                {`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()}
               </MenuItem>
             ))}
           </TextField>

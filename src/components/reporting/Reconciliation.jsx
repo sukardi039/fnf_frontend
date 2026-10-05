@@ -1,14 +1,10 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
   Button,
-  FormControl,
   Grid,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -20,16 +16,13 @@ import {
 import { AccountBalance as AccountBalanceIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { PageHeader, LoadingState, EmptyState } from "../common";
-import { AuthContext } from "../../context/authContext";
-import { listStores } from "../../helpers/store_helper";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { listInventorySnapshots } from "../../helpers/inventory_helper";
 import { submitReconciliation } from "../../helpers/reporting_helper";
 
 export default function Reconciliation() {
   const { t } = useTranslation();
-  const { userInfo } = useContext(AuthContext);
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [businessDate, setBusinessDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [snapshots, setSnapshots] = useState([]);
   const [counts, setCounts] = useState({});
@@ -37,31 +30,6 @@ export default function Reconciliation() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const response = await listStores({ companyId: userInfo?.companyId, active: true });
-        const items = Array.isArray(response.data?.items)
-          ? response.data.items
-          : Array.isArray(response.data) ? response.data : [];
-        if (!active) return;
-        setStores(items);
-        if (items.length === 1) {
-          setSelectedStoreId(String(items[0].storeId || items[0].id || ""));
-        }
-      } catch (err) {
-        if (!active) return;
-        setError(err?.response?.data?.message || t("reconciliation.loadStoresFailed"));
-      }
-    };
-
-    load();
-    return () => {
-      active = false;
-    };
-  }, [t, userInfo?.companyId]);
 
   useEffect(() => {
     let active = true;
@@ -161,24 +129,6 @@ export default function Reconciliation() {
       />
 
       <Box sx={{ mb: 3, display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-        <FormControl sx={{ minWidth: 240 }} size="small">
-          <InputLabel id="reconciliation-store-label">{t("reconciliation.store")}</InputLabel>
-          <Select
-            labelId="reconciliation-store-label"
-            value={selectedStoreId}
-            label={t("reconciliation.store")}
-            onChange={(e) => {
-              setSelectedStoreId(e.target.value);
-              setCounts({});
-            }}
-          >
-            {stores.map((store) => (
-              <MenuItem key={store.storeId || store.id} value={String(store.storeId || store.id)}>
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <TextField
           type="date"
           size="small"

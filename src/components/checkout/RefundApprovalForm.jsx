@@ -46,7 +46,7 @@ const RefundApprovalForm = () => {
     try {
       const response = await request(
         "POST",
-        `/api/v1/refunds/${encodeURIComponent(form.refundId.trim())}/approve`,
+        `/api/refunds/${encodeURIComponent(form.refundId.trim())}/approve`,
         {
           approvalNote: form.approvalNote.trim(),
           returnInspectionRef: form.returnInspectionRef.trim() || undefined,

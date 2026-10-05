@@ -1,23 +1,18 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
-  Divider,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
   MenuItem,
   TextField,
   Typography,
 } from "@mui/material";
-import { Delete as DeleteIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { EmptyState, LoadingState } from "../common";
+import { LoadingState } from "../common";
+import CheckoutCartItems from "../checkout/CheckoutCartItems";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import {
   createCustomerCart,
   addCustomerCartItem,
@@ -34,17 +29,12 @@ export default function CustomerCart({
   onUpdateQuantity,
 }) {
   const { t } = useTranslation();
-  const [storeId, setStoreId] = useState("");
+  const { storeId } = useStoreLocation();
   const [channel, setChannel] = useState("MOBILE_ORDER");
   const [paymentMode, setPaymentMode] = useState("E_PAYMENT");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [transaction, setTransaction] = useState(null);
-
-  const totalItems = useMemo(
-    () => items.reduce((sum, item) => sum + Number(item.quantity), 0),
-    [items],
-  );
 
   const handleCheckout = async () => {
     if (!storeId.trim() || items.length === 0) return;
@@ -116,13 +106,6 @@ export default function CustomerCart({
           </Typography>
           <Box sx={{ display: "grid", gap: 2 }}>
             <TextField
-              label={t("customer.cart.storeId")}
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-              size="small"
-              fullWidth
-            />
-            <TextField
               select
               label={t("customer.cart.channel")}
               value={channel}
@@ -154,67 +137,14 @@ export default function CustomerCart({
         </CardContent>
       </Card>
 
-      {items.length === 0 ? (
-        <EmptyState
-          title={t("customer.cart.empty")}
-          description={t("customer.cart.emptyDescription")}
-        />
-      ) : (
-        <>
-          <List>
-            {items.map((item, index) => (
-              <React.Fragment key={item.skuId}>
-                <ListItem
-                  secondaryAction={
-                    <IconButton
-                      edge="end"
-                      onClick={() => onRemove?.(item.skuId)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  }
-                >
-                  <ListItemText
-                    primary={item.productName}
-                    secondary={`${item.quantity} ${item.uom}`}
-                  />
-                  <TextField
-                    type="number"
-                    size="small"
-                    value={item.quantity}
-                    onChange={(e) =>
-                      onUpdateQuantity?.(item.skuId, e.target.value)
-                    }
-                    inputProps={{ min: 0.001, step: "0.001" }}
-                    sx={{ width: 90, mr: 6 }}
-                  />
-                </ListItem>
-                {index < items.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </List>
-
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mt: 2,
-            }}
-          >
-            <Typography variant="subtitle1">
-              {t("customer.cart.totalItems", { count: totalItems })}
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={handleCheckout}
-              disabled={!storeId.trim() || items.length === 0}
-            >
-              {t("customer.cart.checkout")}
-            </Button>
-          </Box>
-        </>
-      )}
+      <CheckoutCartItems
+        items={items}
+        onRemove={onRemove}
+        onUpdateQuantity={onUpdateQuantity}
+        onSubmit={handleCheckout}
+        submitLabel={t("customer.cart.checkout")}
+        submitDisabled={!storeId}
+      />
     </Box>
   );
 }

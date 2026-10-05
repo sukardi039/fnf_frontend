@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -10,26 +10,21 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Store as StoreIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
-import { AuthContext } from "../../context/authContext";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { request } from "../../helpers/axios_helper";
-import { listStores } from "../../helpers/store_helper";
 import { listInventorySnapshots } from "../../helpers/inventory_helper";
 
 const REASON_CODES = ["SPOILAGE", "MISHANDLING", "THEFT", "OTHER"];
 
 const LossEventForm = () => {
   const { t } = useTranslation();
-  const { userInfo } = useContext(AuthContext);
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState({});
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
-  const [loadingStores, setLoadingStores] = useState(true);
   const [snapshots, setSnapshots] = useState([]);
   const [loadingSnapshots, setLoadingSnapshots] = useState(false);
   const [form, setForm] = useState({
@@ -40,37 +35,6 @@ const LossEventForm = () => {
     reasonCode: "SPOILAGE",
     note: "",
   });
-
-  useEffect(() => {
-    let active = true;
-    const loadStores = async () => {
-      setLoadingStores(true);
-      try {
-        const response = await listStores({
-          companyId: userInfo?.companyId,
-          active: true,
-        });
-        const items = Array.isArray(response.data?.items)
-          ? response.data.items
-          : Array.isArray(response.data)
-            ? response.data
-            : [];
-        if (!active) return;
-        setStores(items);
-        if (items.length === 1) {
-          setSelectedStoreId(String(items[0].storeId || items[0].id || ""));
-        }
-      } catch {
-        // best-effort
-      } finally {
-        if (active) setLoadingStores(false);
-      }
-    };
-    loadStores();
-    return () => {
-      active = false;
-    };
-  }, [userInfo?.companyId]);
 
   useEffect(() => {
     let active = true;
@@ -176,7 +140,7 @@ const LossEventForm = () => {
     try {
       const response = await request(
         "POST",
-        "/api/v1/loss-events",
+        "/api/loss-events",
         {
           lotId: form.lotId.trim(),
           skuId: form.skuId.trim(),
@@ -229,35 +193,6 @@ const LossEventForm = () => {
           })}
         </Alert>
       )}
-
-      <Box sx={{ mb: 3, maxWidth: 320 }}>
-        <FormControl fullWidth size="small" disabled={loadingStores}>
-          <InputLabel id="loss-event-store-label">
-            {t("lossEvent.store")}
-          </InputLabel>
-          <Select
-            labelId="loss-event-store-label"
-            value={selectedStoreId}
-            label={t("lossEvent.store")}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-            startAdornment={
-              <StoreIcon
-                fontSize="small"
-                sx={{ mr: 1, color: "text.secondary" }}
-              />
-            }
-          >
-            {stores.map((store) => (
-              <MenuItem
-                key={store.storeId || store.id}
-                value={String(store.storeId || store.id)}
-              >
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
 
       {loadingSnapshots ? (
         <LoadingState message={t("common.loading")} />

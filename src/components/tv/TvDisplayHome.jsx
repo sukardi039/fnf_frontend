@@ -2,55 +2,23 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
-  FormControl,
   Grid,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { request } from "../../helpers/axios_helper";
-import { listStores } from "../../helpers/store_helper";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { LoadingState } from "../common";
 
 export default function TvDisplayHome() {
   const { t } = useTranslation();
-  const [stores, setStores] = useState([]);
-  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const { storeId: selectedStoreId } = useStoreLocation();
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-
-  useEffect(() => {
-    let active = true;
-    const loadStores = async () => {
-      try {
-        const response = await listStores({ active: true });
-        if (!active) return;
-        const items = Array.isArray(response.data?.items)
-          ? response.data.items
-          : Array.isArray(response.data)
-            ? response.data
-            : [];
-        setStores(items);
-        if (items.length === 1) {
-          setSelectedStoreId(String(items[0].storeId || items[0].id || ""));
-        }
-      } catch {
-        // best-effort
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    loadStores();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -61,7 +29,7 @@ export default function TvDisplayHome() {
       try {
         const response = await request(
           "GET",
-          `/api/v1/reports/daily-summary?date=${today}&storeId=${encodeURIComponent(selectedStoreId)}`,
+          `/api/reports/daily-summary?date=${today}&storeId=${encodeURIComponent(selectedStoreId)}`,
           null,
           { skipAuthRedirect: true, skipBackendErrorDialog: true },
         );
@@ -121,23 +89,6 @@ export default function TvDisplayHome() {
         <Typography variant="h2" fontWeight={700}>
           {t("tv.display.title", "Daily Dashboard")}
         </Typography>
-        <FormControl sx={{ minWidth: 240 }} size="small">
-          <InputLabel>{t("tv.display.store")}</InputLabel>
-          <Select
-            value={selectedStoreId}
-            label={t("tv.display.store")}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-          >
-            {stores.map((store) => (
-              <MenuItem
-                key={store.storeId || store.id}
-                value={String(store.storeId || store.id)}
-              >
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
       </Box>
 
       {error && (

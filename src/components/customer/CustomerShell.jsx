@@ -27,6 +27,7 @@ import CustomerAuth from "./CustomerAuth";
 import CustomerBrowse from "./CustomerBrowse";
 import CustomerCart from "./CustomerCart";
 import CustomerOrders from "./CustomerOrders";
+import StoreScope from "../common/StoreScope";
 import {
   registerCustomer,
   loginCustomer,
@@ -230,12 +231,14 @@ export default function CustomerShell() {
           <Route
             path="/cart"
             element={
-              <CustomerCart
-                items={items}
-                onClear={clearCart}
-                onRemove={removeItem}
-                onUpdateQuantity={updateQuantity}
-              />
+              <StoreScope>
+                <CustomerCart
+                  items={items}
+                  onClear={clearCart}
+                  onRemove={removeItem}
+                  onUpdateQuantity={updateQuantity}
+                />
+              </StoreScope>
             }
           />
           <Route path="/orders" element={<CustomerOrders />} />

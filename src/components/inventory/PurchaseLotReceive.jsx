@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -11,18 +11,16 @@ import {
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
-import { AuthContext } from "../../context/authContext";
+import { useStoreLocation } from "../../context/storeLocationContext";
 import { request } from "../../helpers/axios_helper";
 import { toLocalISO } from "../../helpers/date_helper";
 import { fetchActiveProducts } from "../catalog/productApi";
-import { listStores } from "../../helpers/store_helper";
 
 const PurchaseLotReceive = () => {
   const { t } = useTranslation();
-  const { userInfo } = useContext(AuthContext);
+  const { storeId } = useStoreLocation();
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [stores, setStores] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loadingScopes, setLoadingScopes] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -30,7 +28,7 @@ const PurchaseLotReceive = () => {
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
-    storeId: "",
+    storeId,
     supplierId: "",
     skuId: "",
     supplierLotRef: "",
@@ -46,37 +44,24 @@ const PurchaseLotReceive = () => {
 
     Promise.all([
       fetchActiveProducts(),
-      listStores({ companyId: userInfo?.companyId, active: true }),
-      request("GET", "/api/v1/vendors?active=true", null, {
+      request("GET", "/api/vendors?active=true", null, {
         skipAuthRedirect: true,
         skipBackendErrorDialog: true,
       }),
     ])
-      .then(([productsResponse, storesResponse, vendorsResponse]) => {
+      .then(([productsResponse, vendorsResponse]) => {
         if (!active) return;
         setProducts(
           Array.isArray(productsResponse.data?.items)
             ? productsResponse.data.items
             : [],
         );
-        const storeItems = Array.isArray(storesResponse.data?.items)
-          ? storesResponse.data.items
-          : Array.isArray(storesResponse.data)
-            ? storesResponse.data
-            : [];
-        setStores(storeItems);
         const vendorItems = Array.isArray(vendorsResponse.data)
           ? vendorsResponse.data
           : Array.isArray(vendorsResponse.data?.items)
             ? vendorsResponse.data.items
             : [];
         setVendors(vendorItems);
-        if (storeItems.length === 1) {
-          setForm((current) => ({
-            ...current,
-            storeId: String(storeItems[0].storeId || storeItems[0].id || ""),
-          }));
-        }
       })
       .catch(() => {
         if (active) setError(t("purchaseLot.scopesUnavailable"));
@@ -91,7 +76,7 @@ const PurchaseLotReceive = () => {
     return () => {
       active = false;
     };
-  }, [t, userInfo?.companyId]);
+  }, [t]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -110,16 +95,6 @@ const PurchaseLotReceive = () => {
       uom: product?.uom || "",
     }));
     setErrors((current) => ({ ...current, skuId: "" }));
-    setError("");
-    setResult(null);
-  };
-
-  const handleStoreChange = (event) => {
-    setForm((current) => ({
-      ...current,
-      storeId: event.target.value,
-    }));
-    setErrors((current) => ({ ...current, storeId: "" }));
     setError("");
     setResult(null);
   };
@@ -160,9 +135,9 @@ const PurchaseLotReceive = () => {
     try {
       const response = await request(
         "POST",
-        "/api/v1/lots/receive",
+        "/api/lots/receive",
         {
-          storeId: form.storeId.trim(),
+          storeId,
           supplierId: form.supplierId.trim(),
           skuId: form.skuId,
           supplierLotRef: form.supplierLotRef.trim() || undefined,
@@ -222,26 +197,6 @@ const PurchaseLotReceive = () => {
           maxWidth: 880,
         }}
       >
-        <FormControl fullWidth error={Boolean(errors.storeId)} required>
-          <InputLabel id="purchase-lot-store-label">
-            {t("purchaseLot.storeId")}
-          </InputLabel>
-          <Select
-            labelId="purchase-lot-store-label"
-            value={form.storeId}
-            label={t("purchaseLot.storeId")}
-            onChange={handleStoreChange}
-          >
-            {stores.map((store) => (
-              <MenuItem
-                key={store.storeId || store.id}
-                value={String(store.storeId || store.id)}
-              >
-                {store.storeName || store.name || store.storeId || store.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <FormControl fullWidth error={Boolean(errors.supplierId)} required>
           <InputLabel id="purchase-lot-supplier-label">
             {t("purchaseLot.supplierId")}
