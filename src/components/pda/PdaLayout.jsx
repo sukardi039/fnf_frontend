@@ -14,6 +14,7 @@ import {
   QrCodeScanner as ScanIcon,
   Person as MeIcon,
   ShoppingCart as CheckoutIcon,
+  LocalShipping as PickupIcon,
 } from "@mui/icons-material";
 
 export default function PdaLayout() {
@@ -22,9 +23,11 @@ export default function PdaLayout() {
   const navigate = useNavigate();
 
   const tabValue = location.pathname.startsWith("/pda/me")
-    ? 2
+    ? 3
     : location.pathname.startsWith("/pda/checkout")
       ? 1
+      : location.pathname.startsWith("/pda/pickup")
+        ? 2
       : 0;
 
   return (
@@ -54,6 +57,8 @@ export default function PdaLayout() {
             } else if (newValue === 1) {
               navigate("/pda/checkout", { replace: true });
             } else if (newValue === 2) {
+              navigate("/pda/pickup", { replace: true });
+            } else if (newValue === 3) {
               navigate("/pda/me", { replace: true });
             }
           }}
@@ -65,6 +70,10 @@ export default function PdaLayout() {
           <BottomNavigationAction
             label={t("pda.nav.assistedCheckout", "Checkout")}
             icon={<CheckoutIcon />}
+          />
+          <BottomNavigationAction
+            label={t("pickup.nav")}
+            icon={<PickupIcon />}
           />
           <BottomNavigationAction
             label={t("pda.nav.logout", "Me")}

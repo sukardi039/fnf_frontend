@@ -34,6 +34,7 @@ const normalizeStore = (item) => ({
   storeName: item.storeName,
   companyId: item.companyId,
   timezone: item.timezone,
+  businessHours: item.businessHours,
   address: item.address,
   latitude: item.latitude,
   longitude: item.longitude,

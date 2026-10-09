@@ -32,6 +32,7 @@ import PdaAccessHome from "./pda/PdaAccessHome.jsx";
 import PdaLayout from "./pda/PdaLayout.jsx";
 import PdaMe from "./pda/PdaMe.jsx";
 import StaffCheckout from "./checkout/StaffCheckout.jsx";
+import PickupOrders from "./pickup/PickupOrders.jsx";
 import StoreScope from "./common/StoreScope.jsx";
 import TvDisplayHome from "./tv/TvDisplayHome.jsx";
 import CustomerShell from "./customer/CustomerShell.jsx";
@@ -264,6 +265,7 @@ export default function AppContent() {
           <Route path="/pda" element={<PdaLayout />}>
             <Route index element={<Navigate to="/pda/home" replace />} />
             <Route path="home" element={<PdaAccessHome />} />
+            <Route path="pickup" element={<StoreScope><PickupOrders /></StoreScope>} />
             <Route
               path="checkout"
               element={

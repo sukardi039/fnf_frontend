@@ -11,6 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import { HeaderBar, LoadingState } from "../common";
 import { useStoreLocation } from "../../context/storeLocationContext";
 import { request } from "../../helpers/axios_helper";
@@ -20,21 +21,27 @@ const REASON_CODES = ["SPOILAGE", "MISHANDLING", "THEFT", "OTHER"];
 
 const LossEventForm = () => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { storeId: selectedStoreId } = useStoreLocation();
+  const record = location.state?.record;
+  const isAmend = location.pathname.endsWith("/amend");
+  const canAmend = isAmend && record?.amendable === true;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState({});
   const [snapshots, setSnapshots] = useState([]);
   const [loadingSnapshots, setLoadingSnapshots] = useState(false);
-  const [form, setForm] = useState({
-    lotId: "",
-    skuId: "",
-    quantity: "",
-    uom: "",
-    reasonCode: "SPOILAGE",
-    note: "",
-  });
+  const [form, setForm] = useState(() => ({
+    lotId: record?.lotId || "",
+    skuId: record?.skuId || "",
+    quantity: record?.quantity ?? "",
+    uom: record?.uom || "",
+    reasonCode: record?.reasonCode || "SPOILAGE",
+    note: record?.note || "",
+  }));
+  const isFormLocked = isAmend && !canAmend;
 
   useEffect(() => {
     let active = true;
@@ -83,8 +90,21 @@ const LossEventForm = () => {
         });
       });
     });
+    if (
+      isAmend &&
+      record?.lotId &&
+      !options.some((lot) => lot.lotId === record.lotId)
+    ) {
+      options.push({
+        lotId: record.lotId,
+        skuId: record.skuId,
+        productName: record.productName || record.skuId,
+        uom: record.uom,
+        availableQuantity: record.availableQuantity,
+      });
+    }
     return options;
-  }, [snapshots]);
+  }, [isAmend, record, snapshots]);
 
   const handleLotChange = (event) => {
     const lotId = event.target.value;
@@ -139,16 +159,22 @@ const LossEventForm = () => {
     setResult(null);
     try {
       const response = await request(
-        "POST",
-        "/api/loss-events",
-        {
-          lotId: form.lotId.trim(),
-          skuId: form.skuId.trim(),
-          quantity: Number(form.quantity),
-          uom: form.uom.trim(),
-          reasonCode: form.reasonCode,
-          note: form.note.trim() || undefined,
-        },
+        isAmend ? "PUT" : "POST",
+        isAmend ? `/api/loss-events/${record.lossEventId}` : "/api/loss-events",
+        isAmend
+          ? {
+              quantity: Number(form.quantity),
+              reasonCode: form.reasonCode,
+              note: form.note.trim() || undefined,
+            }
+          : {
+              lotId: form.lotId.trim(),
+              skuId: form.skuId.trim(),
+              quantity: Number(form.quantity),
+              uom: form.uom.trim(),
+              reasonCode: form.reasonCode,
+              note: form.note.trim() || undefined,
+            },
         {
           headers: { "Idempotency-Key": crypto.randomUUID() },
           skipAuthRedirect: true,
@@ -156,17 +182,20 @@ const LossEventForm = () => {
         },
       );
       setResult(response.data);
-      setForm((current) => ({
-        ...current,
-        lotId: "",
-        skuId: "",
-        quantity: "",
-        uom: "",
-        note: "",
-      }));
+      if (!isAmend) {
+        setForm((current) => ({
+          ...current,
+          lotId: "",
+          skuId: "",
+          quantity: "",
+          uom: "",
+          note: "",
+        }));
+      }
     } catch (requestError) {
       setError(
-        requestError?.response?.data?.message || t("lossEvent.createFailed"),
+        requestError?.response?.data?.message ||
+          t(isAmend ? "lossEvent.amendFailed" : "lossEvent.createFailed"),
       );
     } finally {
       setSaving(false);
@@ -176,10 +205,18 @@ const LossEventForm = () => {
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <HeaderBar
-        title={t("lossEvent.title")}
+        title={t(isAmend ? "lossEvent.amendTitle" : "lossEvent.title")}
         subtitle={t("lossEvent.subtitle")}
+        showBackButton
+        onBack={() => navigate("/inventory/loss-events")}
+        backLabel={t("basic.back")}
       />
 
+      {isFormLocked && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {t("inventory.amendNotAllowed")}
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -187,7 +224,7 @@ const LossEventForm = () => {
       )}
       {result && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          {t("lossEvent.created", {
+          {t(isAmend ? "lossEvent.amended" : "lossEvent.created", {
             lossEventId: result.lossEventId,
             remainingQuantity: result.remainingQuantity,
           })}
@@ -214,7 +251,9 @@ const LossEventForm = () => {
               value={form.lotId}
               label={t("lossEvent.lotId")}
               onChange={handleLotChange}
-              disabled={!selectedStoreId || lotOptions.length === 0}
+              disabled={
+                !selectedStoreId || lotOptions.length === 0 || isAmend
+              }
             >
               {lotOptions.map((lot) => (
                 <MenuItem key={lot.lotId} value={lot.lotId}>
@@ -242,6 +281,7 @@ const LossEventForm = () => {
             helperText={errors.skuId}
             required
             fullWidth
+            disabled={isAmend}
           />
           <TextField
             label={t("lossEvent.quantity")}
@@ -254,6 +294,7 @@ const LossEventForm = () => {
             helperText={errors.quantity}
             required
             fullWidth
+            disabled={isFormLocked}
           />
           <TextField
             label={t("lossEvent.uom")}
@@ -264,6 +305,7 @@ const LossEventForm = () => {
             helperText={errors.uom}
             required
             fullWidth
+            disabled={isAmend}
           />
           <TextField
             select
@@ -271,6 +313,7 @@ const LossEventForm = () => {
             name="reasonCode"
             value={form.reasonCode}
             onChange={handleChange}
+            disabled={isFormLocked}
             fullWidth
           >
             {REASON_CODES.map((reasonCode) => (
@@ -291,6 +334,7 @@ const LossEventForm = () => {
             multiline
             minRows={3}
             fullWidth
+            disabled={isFormLocked}
           />
         </Box>
       )}
@@ -298,10 +342,10 @@ const LossEventForm = () => {
       <Button
         type="submit"
         variant="contained"
-        disabled={saving || !selectedStoreId}
+        disabled={saving || !selectedStoreId || isFormLocked}
         sx={{ mt: 3 }}
       >
-        {t("lossEvent.record")}
+        {t(isAmend ? "inventory.amend" : "lossEvent.record")}
       </Button>
     </Box>
   );

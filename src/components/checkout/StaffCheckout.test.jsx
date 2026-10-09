@@ -15,6 +15,7 @@ vi.mock("@mui/icons-material", () => ({
   Add: () => null,
   Delete: () => null,
   Inventory2: () => null,
+  PhotoCamera: () => null,
 }));
 vi.mock("../common", () => ({
   HeaderBar: HeaderBarMock,
@@ -70,10 +71,15 @@ describe("PDA staff-assisted checkout", () => {
       .mockResolvedValueOnce({
         data: {
           transactionId: "TX-1",
-          state: "PAYMENT_PENDING",
+          state: "CASH_PENDING_CONFIRMATION",
           amount: "11.00",
           currency: "MYR",
-          payment: { redirectUrl: "https://payments.example/checkout/TX-1" },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          transactionId: "TX-1", state: "READY_FOR_HANDOVER", paymentStatus: "SUCCESS",
+          confirmedBy: "STAFF-1", confirmedAt: "2026-10-09T04:00:00Z",
         },
       });
   });
@@ -91,6 +97,8 @@ describe("PDA staff-assisted checkout", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "staffCheckout.title" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "customer.browse.photoSearchAction" }))
+      .toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "Apples" }))
       .toHaveAttribute("src", "https://images.example/apples.jpg");
     expect(screen.getByText("pda.checkout.staffAssisted")).toBeInTheDocument();
@@ -137,8 +145,60 @@ describe("PDA staff-assisted checkout", () => {
       expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } }),
     );
     expect(await screen.findByText("staffCheckout.completed")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "staffCheckout.openPayment" }))
-      .toHaveAttribute("href", "https://payments.example/checkout/TX-1");
+    expect(screen.queryByRole("link", { name: "staffCheckout.openPayment" }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "staffCheckout.newOrder" }))
+      .toBeDisabled();
+    expect(screen.getByText("staffCheckout.cashPending")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "staffCheckout.confirmCash" })).toBeDisabled();
+    await user.type(screen.getByLabelText(/staffCheckout.cashNote/), "Received MYR 11 in full");
+    await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(await screen.findByText("staffCheckout.cashConfirmed")).toBeInTheDocument();
+    expect(request).toHaveBeenNthCalledWith(
+      4, "POST", "/api/transactions/TX-1/confirm-cash",
+      { confirmationNote: "Received MYR 11 in full" },
+      expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } }),
+    );
+    expect(screen.getByRole("button", { name: "staffCheckout.newOrder" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "staffCheckout.confirmCash" })).not.toBeInTheDocument();
+    expect(request.mock.calls.filter((call) => call[1] === "/api/checkout")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "staffCheckout.newOrder" }));
+    expect(await screen.findByRole("button", { name: "customer.browse.add" })).toBeInTheDocument();
+    expect(screen.queryByText("staffCheckout.cashConfirmed")).not.toBeInTheDocument();
+  });
+
+  it("shows a clear error when checkout returns no transaction details", async () => {
+    const user = userEvent.setup();
+    request
+      .mockReset()
+      .mockResolvedValueOnce({ data: { cartId: "CART-1", state: "OPEN" } })
+      .mockResolvedValueOnce({
+        data: {
+          cartId: "CART-1",
+          quoteId: "QUOTE-1",
+          subtotal: "12.00",
+          discount: "1.00",
+          total: "11.00",
+          currency: "MYR",
+          expiresAt: "2026-10-05T12:00:00Z",
+        },
+      })
+      .mockResolvedValueOnce({ data: null });
+    render(
+      <MemoryRouter>
+        <StoreLocationContext.Provider value={{ storeId: "GPS-STORE-1", source: "gps" }}>
+          <StaffCheckout pdaMode />
+        </StoreLocationContext.Provider>
+      </MemoryRouter>,
+    );
+
+    await user.type(await screen.findByRole("spinbutton"), "1");
+    await user.click(screen.getByRole("button", { name: "customer.browse.add" }));
+    await user.click(screen.getByRole("button", { name: "staffCheckout.getQuote" }));
+    await user.click(await screen.findByRole("button", { name: "staffCheckout.checkout" }));
+
+    expect(await screen.findByText("staffCheckout.checkoutNoTransaction"))
+      .toBeInTheDocument();
   });
 
   it("keeps channel selection on web checkout while sharing the product/cart controls", async () => {
@@ -152,6 +212,9 @@ describe("PDA staff-assisted checkout", () => {
     );
 
     await user.click(await screen.findByRole("combobox"));
+    expect(screen.queryByRole("option", {
+      name: "staffCheckout.channels.MOBILE_ORDER",
+    })).not.toBeInTheDocument();
     await user.click(await screen.findByRole("option", {
       name: "staffCheckout.channels.STORE_SELF_SELECT",
     }));
@@ -171,5 +234,92 @@ describe("PDA staff-assisted checkout", () => {
       },
       expect.any(Object),
     );
+  });
+
+  async function createPendingCash(user, paymentMode = "CASH") {
+    render(
+      <MemoryRouter>
+        <StoreLocationContext.Provider value={{ storeId: "GPS-STORE-1" }}>
+          <StaffCheckout />
+        </StoreLocationContext.Provider>
+      </MemoryRouter>,
+    );
+    await user.type(await screen.findByRole("spinbutton"), "1");
+    await user.click(screen.getByRole("button", { name: "customer.browse.add" }));
+    await user.click(screen.getByRole("button", { name: "staffCheckout.getQuote" }));
+    await screen.findByText("MYR 11.00");
+    if (paymentMode !== "CASH") {
+      await user.click(screen.getByRole("combobox", { name: "staffCheckout.paymentMode" }));
+      await user.click(screen.getByRole("option", { name: `staffCheckout.paymentModes.${paymentMode}` }));
+    }
+    await user.click(screen.getByRole("button", { name: "staffCheckout.checkout" }));
+    await screen.findByText("staffCheckout.completed");
+  }
+
+  it("confirms pay-at-counter cash on web checkout as well", async () => {
+    const user = userEvent.setup();
+    await createPendingCash(user, "PAY_AT_COUNTER");
+    await user.type(screen.getByLabelText(/staffCheckout.cashNote/), "Full cash received at counter");
+    await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(await screen.findByText("staffCheckout.cashConfirmed")).toBeInTheDocument();
+    expect(request.mock.calls[2][2].paymentMode).toBe("PAY_AT_COUNTER");
+    expect(request.mock.calls[3][1]).toBe("/api/transactions/TX-1/confirm-cash");
+  });
+
+  it("keeps failed cash confirmation pending and reuses the key on retry", async () => {
+    request.mockReset()
+      .mockResolvedValueOnce({ data: { cartId: "CART-1" } })
+      .mockResolvedValueOnce({ data: {
+        quoteId: "QUOTE-1", currency: "MYR", subtotal: "12.00", discount: "1.00",
+        total: "11.00", expiresAt: "2026-10-09T05:00:00Z",
+      } })
+      .mockResolvedValueOnce({ data: { transactionId: "TX-1", state: "CASH_PENDING_CONFIRMATION", amount: "11.00", currency: "MYR" } })
+      .mockRejectedValueOnce({ response: { data: { message: "Connection interrupted" } } })
+      .mockResolvedValueOnce({ data: {
+        transactionId: "TX-1", state: "READY_FOR_HANDOVER", paymentStatus: "SUCCESS",
+        confirmedBy: "STAFF-1", confirmedAt: "2026-10-09T04:00:00Z",
+      } });
+    const user = userEvent.setup();
+    await createPendingCash(user);
+    await user.type(screen.getByLabelText(/staffCheckout.cashNote/), "Received full amount");
+    await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(await screen.findByText("Connection interrupted")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "staffCheckout.newOrder" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(await screen.findByText("staffCheckout.cashConfirmed")).toBeInTheDocument();
+    expect(request.mock.calls[3][3].headers["Idempotency-Key"])
+      .toBe(request.mock.calls[4][3].headers["Idempotency-Key"]);
+    expect(request.mock.calls.filter((call) => call[1] === "/api/checkout")).toHaveLength(1);
+  });
+
+  it("does not accept confirmation for another transaction", async () => {
+    const user = userEvent.setup();
+    await createPendingCash(user);
+    request.mockReset().mockResolvedValue({ data: {
+      transactionId: "TX-OTHER", state: "READY_FOR_HANDOVER", paymentStatus: "SUCCESS",
+      confirmedBy: "STAFF-1", confirmedAt: "2026-10-09T04:00:00Z",
+    } });
+    await user.type(screen.getByLabelText(/staffCheckout.cashNote/), "Cash received");
+    await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(await screen.findByText("staffCheckout.cashInvalidResponse")).toBeInTheDocument();
+    expect(screen.queryByText("staffCheckout.cashConfirmed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "staffCheckout.newOrder" })).toBeDisabled();
+  });
+
+  it("prevents double submission while cash confirmation is in flight", async () => {
+    const user = userEvent.setup();
+    await createPendingCash(user);
+    let resolveConfirmation;
+    request.mockReset().mockImplementation(() => new Promise((resolve) => { resolveConfirmation = resolve; }));
+    await user.type(screen.getByLabelText(/staffCheckout.cashNote/), "Cash received");
+    await user.dblClick(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "staffCheckout.cashConfirming" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "staffCheckout.newOrder" })).toBeDisabled();
+    resolveConfirmation({ data: {
+      transactionId: "TX-1", state: "READY_FOR_HANDOVER", paymentStatus: "SUCCESS",
+      confirmedBy: "STAFF-1", confirmedAt: "2026-10-09T04:00:00Z",
+    } });
+    expect(await screen.findByText("staffCheckout.cashConfirmed")).toBeInTheDocument();
   });
 });

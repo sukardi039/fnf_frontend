@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -14,7 +14,6 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
-  Add as AddIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   LocalOffer as LocalOfferIcon,
@@ -37,6 +36,7 @@ import {
   listPriceRules,
   publishPriceRule,
 } from "./productApi";
+import { canPublishPriceRule, getPriceRuleStatus } from "./priceRuleUtils";
 
 const PriceRuleList = () => {
   const { t } = useTranslation();
@@ -92,23 +92,25 @@ const PriceRuleList = () => {
     };
   }, [t]);
 
-  const rows = useMemo(
-    () =>
-      rules.map((rule) => ({
-        ...rule,
-        id: rule.ruleId,
-        displayProduct: rule.productName
-          ? `${rule.productName} (${rule.skuId})`
-          : rule.skuId,
-        displayDiscount:
-          rule.discountType === "PERCENT"
-            ? `${rule.discountValue}%`
-            : `${rule.currency || ""} ${rule.discountValue}`,
-        displayPeriod: `${t("priceRule.from")} ${rule.startAt ? new Date(rule.startAt).toLocaleString() : ""} ${t("priceRule.to")} ${rule.endAt ? new Date(rule.endAt).toLocaleString() : ""}`,
-        displayStatus: t(`priceRule.status.${rule.status}`, rule.status),
-      })),
-    [rules, t],
-  );
+  const rows = rules.map((rule) => {
+    const status = getPriceRuleStatus(rule);
+    return {
+      ...rule,
+      id: rule.ruleId,
+      status,
+      canEdit: ["DRAFT", "EXPIRED"].includes(status),
+      canPublish: canPublishPriceRule({ ...rule, status }),
+      displayProduct: rule.productName
+        ? `${rule.productName} (${rule.skuId})`
+        : rule.skuId,
+      displayDiscount:
+        rule.discountType === "PERCENT"
+          ? `${rule.discountValue}%`
+          : `${rule.currency || ""} ${rule.discountValue}`,
+      displayPeriod: `${t("priceRule.from")} ${rule.startAt ? new Date(rule.startAt).toLocaleString() : ""} ${t("priceRule.to")} ${rule.endAt ? new Date(rule.endAt).toLocaleString() : ""}`,
+      displayStatus: t(`priceRule.status.${status}`, status),
+    };
+  });
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = normalizedSearch
@@ -133,7 +135,10 @@ const PriceRuleList = () => {
       await loadRules();
     } catch (requestError) {
       setError(
-        requestError?.response?.data?.message || t("priceRule.publishFailed"),
+        requestError?.response?.data?.message ||
+          (requestError?.response?.status === 409
+            ? t("priceRule.publishConflict")
+            : t("priceRule.publishFailed")),
       );
     }
   };
@@ -207,7 +212,7 @@ const PriceRuleList = () => {
       filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", gap: 0.5 }}>
-          {params.row.status !== "ACTIVE" && (
+          {params.row.canPublish && (
             <IconButton
               size="small"
               color="primary"
@@ -217,15 +222,17 @@ const PriceRuleList = () => {
               <PublishIcon fontSize="small" />
             </IconButton>
           )}
-          <IconButton
-            size="small"
-            onClick={() =>
-              navigate("/price-rules/edit", { state: { priceRule: params.row } })
-            }
-            aria-label={t("priceRule.edit")}
-          >
-            <EditIcon fontSize="small" />
-          </IconButton>
+          {params.row.canEdit && (
+            <IconButton
+              size="small"
+              onClick={() =>
+                navigate("/price-rules/edit", { state: { priceRule: params.row } })
+              }
+              aria-label={t("priceRule.edit")}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          )}
           <IconButton
             size="small"
             color="error"
@@ -317,7 +324,7 @@ const PriceRuleList = () => {
               item={rule}
               extraContent={
                 <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                  {rule.status !== "ACTIVE" && (
+                  {rule.canPublish && (
                     <Button
                       size="small"
                       variant="outlined"
@@ -327,18 +334,20 @@ const PriceRuleList = () => {
                       {t("priceRule.publish")}
                     </Button>
                   )}
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={() =>
-                      navigate("/price-rules/edit", {
-                        state: { priceRule: rule },
-                      })
-                    }
-                  >
-                    {t("basic.edit")}
-                  </Button>
+                  {rule.canEdit && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<EditIcon />}
+                      onClick={() =>
+                        navigate("/price-rules/edit", {
+                          state: { priceRule: rule },
+                        })
+                      }
+                    >
+                      {t("basic.edit")}
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     variant="outlined"

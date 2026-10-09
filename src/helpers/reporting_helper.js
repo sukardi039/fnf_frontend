@@ -10,6 +10,26 @@ export const getDailySummary = (params = {}) => {
   return request("GET", `${API_BASE}/reports/daily-summary${qs ? `?${qs}` : ""}`);
 };
 
+export const formatReportMoney = (value, fallbackCurrency) => {
+  const amount =
+    value && typeof value === "object" && "amount" in value
+      ? value.amount
+      : value;
+  if (
+    amount === null ||
+    amount === undefined ||
+    amount === "" ||
+    !Number.isFinite(Number(amount))
+  ) {
+    return "—";
+  }
+
+  const formatted = Number(amount).toFixed(2);
+  const currency =
+    value && typeof value === "object" ? value.currency : fallbackCurrency;
+  return currency ? `${currency} ${formatted}` : formatted;
+};
+
 export const submitReconciliation = (data) =>
   request("POST", `${API_BASE}/reconciliations`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },

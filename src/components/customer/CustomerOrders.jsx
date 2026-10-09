@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Card, CardContent, Chip, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, Chip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { LoadingState, EmptyState } from "../common";
 import { listCustomerTransactions } from "../../helpers/customer_cart_helper";
 import { getCustomerInfo } from "../../helpers/customer_helper";
+import CollectionToken from "./CollectionToken";
+import PickupSchedule from "./PickupSchedule";
 
 const STATUS_COLORS = {
   CART_CREATED: "default",
   CHECKOUT_PENDING: "default",
   PAYMENT_PENDING: "warning",
+  CASH_PENDING_CONFIRMATION: "warning",
   PAYMENT_SUCCESS: "success",
   PAYMENT_FAILED: "error",
   READY_FOR_HANDOVER: "info",
@@ -19,24 +22,33 @@ const STATUS_COLORS = {
 };
 
 export default function CustomerOrders() {
-  const { t } = useTranslation();
   const customer = useMemo(() => getCustomerInfo(), []);
+  const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       setLoading(true);
+      setError("");
       try {
         const response = await listCustomerTransactions({
           customerId: customer?.customerId,
+          page,
+          size: 20,
         });
         if (!active) return;
-        setItems(
-          Array.isArray(response.data?.items) ? response.data.items : [],
-        );
+        if (!Array.isArray(response.data?.items) || !Number.isInteger(response.data.total)) {
+          throw new Error(t("customer.orders.loadFailed"));
+        }
+        setItems(response.data.items);
+        setTotal(response.data.total);
+        window.dispatchEvent(new Event("customer:orders:refresh"));
       } catch (err) {
         if (!active) return;
         setError(
@@ -50,7 +62,7 @@ export default function CustomerOrders() {
     return () => {
       active = false;
     };
-  }, [t, customer?.customerId]);
+  }, [t, customer?.customerId, page, revision]);
 
   if (loading) {
     return <LoadingState message={t("customer.orders.loading")} />;
@@ -58,13 +70,14 @@ export default function CustomerOrders() {
 
   return (
     <Box sx={{ p: 2 }}>
+      <Button onClick={() => setRevision((value) => value + 1)}>{t("pickup.refresh")}</Button>
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      {items.length === 0 ? (
+      {!error && items.length === 0 ? (
         <EmptyState
           title={t("customer.orders.noData")}
           description={t("customer.orders.noDataDescription")}
@@ -96,6 +109,30 @@ export default function CustomerOrders() {
                     amount: `${item.currency} ${item.amount}`,
                   })}
                 </Typography>
+                <PickupSchedule order={item} />
+                {item.state === "EXPIRED" && (
+                  <Typography>{t("customer.orders.expired")}</Typography>
+                )}
+                {item.preparationStatus &&
+                  !["EXPIRED", "CANCELLED", "REFUNDED", "HANDED_OVER"].includes(item.state) && (
+                  <Typography>{t(`pickup.status.${item.preparationStatus}`)}</Typography>
+                )}
+                {item.channel === "MOBILE_ORDER" && item.paymentMode === "PAY_AT_COUNTER" &&
+                  item.state === "CASH_PENDING_CONFIRMATION" && (
+                    <>
+                      <Typography>{t("customer.cart.payAtCollectionInstructions")}</Typography>
+                      {item.arrivalStatus === "ARRIVED" ? (
+                        <Typography>{t("pickup.arrived")}</Typography>
+                      ) : (
+                        <CollectionToken transactionId={item.transactionId} purpose="arrival" />
+                      )}
+                    </>
+                  )}
+                {item.channel === "MOBILE_ORDER" &&
+                  item.preparationStatus === "READY" &&
+                  ["PAYMENT_SUCCESS", "READY_FOR_HANDOVER"].includes(item.state) && (
+                    <CollectionToken transactionId={item.transactionId} />
+                  )}
                 <Typography variant="body2" color="text.secondary">
                   {t("customer.orders.createdAt", {
                     date: item.createdAt
@@ -108,6 +145,10 @@ export default function CustomerOrders() {
           ))}
         </Box>
       )}
+      <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+        <Button disabled={page === 0} onClick={() => setPage(page - 1)}>{t("pickup.previous")}</Button>
+        <Button disabled={(page + 1) * 20 >= total} onClick={() => setPage(page + 1)}>{t("pickup.next")}</Button>
+      </Box>
     </Box>
   );
 }

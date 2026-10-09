@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import {
   Alert,
@@ -7,12 +7,22 @@ import {
   Card,
   CardActions,
   CardContent,
+  IconButton,
+  InputAdornment,
   TextField,
   Typography,
 } from "@mui/material";
-import { Add as AddIcon, Inventory2 as InventoryIcon } from "@mui/icons-material";
+import {
+  Add as AddIcon,
+  Inventory2 as InventoryIcon,
+  PhotoCamera as PhotoCameraIcon,
+  Undo as UndoIcon,
+} from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { fetchActiveProducts } from "../catalog/productApi";
+import {
+  fetchActiveProducts,
+  matchProductsByImage,
+} from "../catalog/productApi";
 import { EmptyState, LoadingState } from "../common";
 import { getDisplayImageInfo, ThumbnailImg } from "../../helpers/file_helper";
 
@@ -90,13 +100,36 @@ ProductPicture.propTypes = {
   alt: PropTypes.string,
 };
 
-export default function ProductCatalog({ onAddToCart, disabled = false }) {
+const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+const getQuantityStep = (uom) =>
+  ["kg", "l"].includes(String(uom || "").trim().toLowerCase()) ? "0.1" : "1";
+
+export default function ProductCatalog({
+  onAddToCart,
+  disabled = false,
+  enablePhotoSearch = true,
+  storeId = "",
+}) {
   const { t } = useTranslation();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState({});
+  const [photo, setPhoto] = useState(null);
+  const photoInputRef = useRef(null);
+  const photoRequestId = useRef(0);
+  const [photoMatches, setPhotoMatches] = useState(null);
+  const [photoError, setPhotoError] = useState("");
+  const [matchingPhoto, setMatchingPhoto] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      photoRequestId.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -128,13 +161,80 @@ export default function ProductCatalog({ onAddToCart, disabled = false }) {
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return products;
-    return products.filter((product) =>
+    const availableProducts = photoMatches ?? products;
+    if (!term) return availableProducts;
+    return availableProducts.filter((product) =>
       [product.productName, product.productCode, product.description].some(
         (value) => String(value || "").toLowerCase().includes(term),
       ),
     );
-  }, [products, search]);
+  }, [photoMatches, products, search]);
+
+  const clearPhotoSearch = () => {
+    photoRequestId.current += 1;
+    setPhoto(null);
+    setPhotoMatches(null);
+    setPhotoError("");
+    setMatchingPhoto(false);
+  };
+
+  const matchPhoto = async (selectedPhoto) => {
+    const requestId = photoRequestId.current + 1;
+    photoRequestId.current = requestId;
+    setMatchingPhoto(true);
+    setPhotoError("");
+    try {
+      const response = await matchProductsByImage(selectedPhoto, storeId);
+      const matches = response.data?.matches;
+      if (
+        !Array.isArray(matches) ||
+        matches.some(
+          (match) =>
+            !match ||
+            typeof match.skuId !== "string" ||
+            typeof match.productName !== "string",
+        )
+      ) {
+        throw new Error(t("customer.browse.photoInvalidResponse"));
+      }
+      if (photoRequestId.current === requestId) {
+        setPhotoMatches(matches.slice(0, 5));
+      }
+    } catch (requestError) {
+      if (photoRequestId.current === requestId) {
+        setPhotoError(
+          requestError?.response?.data?.message ||
+            requestError.message ||
+            t("customer.browse.photoMatchFailed"),
+        );
+        setPhotoMatches(null);
+      }
+    } finally {
+      if (photoRequestId.current === requestId) setMatchingPhoto(false);
+    }
+  };
+
+  const handlePhotoSelected = (event) => {
+    const selectedPhoto = event.target.files?.[0] || null;
+    event.target.value = "";
+    if (!selectedPhoto) return;
+    if (!SUPPORTED_PHOTO_TYPES.includes(selectedPhoto.type)) {
+      setPhotoError(t("customer.browse.photoUnsupported"));
+      return;
+    }
+    if (selectedPhoto.size > MAX_PHOTO_SIZE_BYTES) {
+      setPhotoError(t("customer.browse.photoTooLarge"));
+      return;
+    }
+    if (!storeId) {
+      setPhotoError(t("customer.browse.photoStoreRequired"));
+      return;
+    }
+    setPhoto(selectedPhoto);
+    setPhotoMatches(null);
+    setPhotoError("");
+    matchPhoto(selectedPhoto);
+  };
 
   const addProduct = (product) => {
     const quantity = Number(quantities[product.skuId]);
@@ -164,13 +264,65 @@ export default function ProductCatalog({ onAddToCart, disabled = false }) {
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         disabled={disabled}
+        InputProps={{
+          endAdornment: enablePhotoSearch ? (
+            <InputAdornment position="end">
+              <IconButton
+                aria-label={t(photo
+                  ? "customer.browse.clearPhoto"
+                  : "customer.browse.photoSearchAction")}
+                onClick={() => {
+                  if (photo) clearPhotoSearch();
+                  else photoInputRef.current?.click();
+                }}
+                disabled={disabled || (!photo && !storeId)}
+                edge="end"
+              >
+                {photo ? <UndoIcon /> : <PhotoCameraIcon />}
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        }}
         sx={{ mb: 2 }}
       />
+      {enablePhotoSearch && (
+        <input
+          hidden
+          ref={photoInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          onChange={handlePhotoSelected}
+        />
+      )}
+      {enablePhotoSearch && (photo || photoError) && (
+        <Box sx={{ mb: 2 }}>
+          {photo && matchingPhoto && (
+            <Alert severity="info">
+              {t("customer.browse.matchingPhoto")}
+            </Alert>
+          )}
+          {photoError && (
+            <Alert severity="error">
+              {photoError}
+            </Alert>
+          )}
+        </Box>
+      )}
+      {photoMatches !== null && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {t("customer.browse.photoMatchHint")}
+        </Alert>
+      )}
       {filteredProducts.length === 0 ? (
         <EmptyState
-          title={t("customer.browse.noData")}
+          title={t(photoMatches !== null
+            ? "customer.browse.noPhotoMatches"
+            : "customer.browse.noData")}
           description={
-            search
+            photoMatches !== null
+              ? t("customer.browse.noPhotoMatchesDescription")
+              : search
               ? t("customer.browse.noSearchResults")
               : t("customer.browse.noDataDescription")
           }
@@ -229,7 +381,7 @@ export default function ProductCatalog({ onAddToCart, disabled = false }) {
                           [product.skuId]: event.target.value,
                         }))
                       }
-                      inputProps={{ min: 0.001, step: "0.001" }}
+                      inputProps={{ min: 0, step: getQuantityStep(product.uom) }}
                       disabled={disabled}
                       sx={{ width: 110 }}
                     />
@@ -260,4 +412,6 @@ export default function ProductCatalog({ onAddToCart, disabled = false }) {
 ProductCatalog.propTypes = {
   onAddToCart: PropTypes.func,
   disabled: PropTypes.bool,
+  enablePhotoSearch: PropTypes.bool,
+  storeId: PropTypes.string,
 };

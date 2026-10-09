@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import PropTypes from "prop-types";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -17,7 +18,7 @@ import { useStoreLocation } from "../../context/storeLocationContext";
 import CheckoutCartItems from "./CheckoutCartItems";
 import ProductCatalog from "./ProductCatalog";
 
-const CHANNELS = ["STORE_SELF_SELECT", "STAFF_ASSISTED", "MOBILE_ORDER"];
+const CHANNELS = ["STORE_SELF_SELECT", "STAFF_ASSISTED"];
 const PAYMENT_MODES = ["E_PAYMENT", "CASH", "PAY_AT_COUNTER"];
 
 const StaffCheckout = ({ pdaMode = false }) => {
@@ -33,6 +34,10 @@ const StaffCheckout = ({ pdaMode = false }) => {
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirmationNote, setConfirmationNote] = useState("");
+  const cashCommand = useRef(null);
+  const submitting = useRef(false);
+  const checkoutCommand = useRef(null);
 
   const addItem = (item) => {
     setItems((current) => {
@@ -129,37 +134,96 @@ const StaffCheckout = ({ pdaMode = false }) => {
   };
 
   const checkout = async () => {
-    if (!cart?.cartId || !quote?.quoteId) return;
+    if (!cart?.cartId || !quote?.quoteId || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
+      const payload = {
+        cartId: cart.cartId,
+        quoteId: quote.quoteId,
+        paymentMode,
+        channel: pdaMode ? "STAFF_ASSISTED" : channel,
+      };
+      const signature = JSON.stringify(payload);
+      if (checkoutCommand.current?.signature !== signature) {
+        checkoutCommand.current = { signature, key: crypto.randomUUID() };
+      }
       const response = await request(
         "POST",
         "/api/checkout",
+        payload,
         {
-          cartId: cart.cartId,
-          quoteId: quote.quoteId,
-          paymentMode,
-          channel: pdaMode ? "STAFF_ASSISTED" : channel,
-        },
-        {
-          headers: { "Idempotency-Key": crypto.randomUUID() },
+          headers: { "Idempotency-Key": checkoutCommand.current.key },
           skipAuthRedirect: true,
           skipBackendErrorDialog: true,
         },
       );
-      setTransaction(response.data);
+      if (!response.data?.transactionId) {
+        throw new Error(t("staffCheckout.checkoutNoTransaction"));
+      }
+      setTransaction({ ...response.data, paymentMode });
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
+          requestError?.message ||
           t("staffCheckout.checkoutFailed"),
       );
     } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
+
+  const confirmCash = async (event) => {
+    event.preventDefault();
+    if (submitting.current) return;
+    const note = confirmationNote.trim();
+    if (!note || note.length > 500) {
+      setError(t("staffCheckout.cashNoteRequired"));
+      return;
+    }
+    if (!transaction || transaction.state !== "CASH_PENDING_CONFIRMATION" ||
+        !["CASH", "PAY_AT_COUNTER"].includes(transaction.paymentMode)) {
+      setError(t("staffCheckout.cashNotPending"));
+      return;
+    }
+    submitting.current = true;
+    setBusy(true);
+    setError("");
+    const signature = JSON.stringify({ transactionId: transaction.transactionId, note });
+    if (cashCommand.current?.signature !== signature) {
+      cashCommand.current = { signature, key: crypto.randomUUID() };
+    }
+    try {
+      const { data } = await request(
+        "POST",
+        `/api/transactions/${encodeURIComponent(transaction.transactionId)}/confirm-cash`,
+        { confirmationNote: note },
+        {
+          headers: { "Idempotency-Key": cashCommand.current.key },
+          skipAuthRedirect: true,
+          skipBackendErrorDialog: true,
+        },
+      );
+      if (data?.transactionId !== transaction.transactionId ||
+          data.state !== "READY_FOR_HANDOVER" || data.paymentStatus !== "SUCCESS" ||
+          typeof data.confirmedBy !== "string" || !data.confirmedBy.trim() ||
+          !Number.isFinite(Date.parse(data.confirmedAt))) {
+        throw new Error(t("staffCheckout.cashInvalidResponse"));
+      }
+      setTransaction((current) => ({ ...current, ...data }));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message ||
+        requestError?.message || t("staffCheckout.cashConfirmFailed"));
+    } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
   const startNewOrder = () => {
+    if (submitting.current || transaction?.state === "CASH_PENDING_CONFIRMATION") return;
     setItems([]);
     setCart(null);
     setAddedItems(0);
@@ -168,9 +232,14 @@ const StaffCheckout = ({ pdaMode = false }) => {
     setCustomerId("");
     setPaymentMode("CASH");
     setError("");
+    setConfirmationNote("");
+    cashCommand.current = null;
+    checkoutCommand.current = null;
   };
 
   const locked = Boolean(cart);
+  const cashPending = transaction?.state === "CASH_PENDING_CONFIRMATION";
+  const paid = ["PAYMENT_SUCCESS", "READY_FOR_HANDOVER", "HANDED_OVER"].includes(transaction?.state);
 
   return (
     <Box>
@@ -178,6 +247,12 @@ const StaffCheckout = ({ pdaMode = false }) => {
         title={t("staffCheckout.title")}
         subtitle={t("staffCheckout.subtitle")}
       />
+      <Alert severity="info" sx={{ mb: 2 }}>
+        {t("pickup.manageExisting")}{" "}
+        <Link component={RouterLink} to={pdaMode ? "/pda/pickup" : "/checkout/pickup"}>
+          {t("pickup.title")}
+        </Link>
+      </Alert>
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -185,7 +260,7 @@ const StaffCheckout = ({ pdaMode = false }) => {
       )}
       {transaction ? (
         <Paper sx={{ p: 3, maxWidth: 880 }}>
-          <Alert severity="success">
+          <Alert severity={paid ? "success" : "info"}>
             {t("staffCheckout.completed", {
               transactionId: transaction.transactionId,
               state: transaction.state,
@@ -204,7 +279,33 @@ const StaffCheckout = ({ pdaMode = false }) => {
               </>
             )}
           </Alert>
-          <Button onClick={startNewOrder} sx={{ mt: 2 }}>
+          {cashPending && (
+            <Box component="form" onSubmit={confirmCash} sx={{ mt: 2 }}>
+              <Alert severity="warning" sx={{ mb: 2 }}>{t("staffCheckout.cashPending")}</Alert>
+              <TextField
+                label={t("staffCheckout.cashNote")} value={confirmationNote}
+                onChange={(event) => setConfirmationNote(event.target.value)}
+                inputProps={{ maxLength: 500 }} disabled={busy}
+                required fullWidth multiline minRows={2}
+                helperText={t("staffCheckout.cashNoteHint")}
+              />
+              <Button
+                type="submit" variant="contained" sx={{ mt: 2 }}
+                disabled={busy || !confirmationNote.trim()}
+              >
+                {t(busy ? "staffCheckout.cashConfirming" : "staffCheckout.confirmCash")}
+              </Button>
+            </Box>
+          )}
+          {transaction.paymentStatus === "SUCCESS" && transaction.confirmedAt && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              {t("staffCheckout.cashConfirmed", {
+                confirmedBy: transaction.confirmedBy,
+                confirmedAt: new Date(transaction.confirmedAt).toLocaleString(),
+              })}
+            </Alert>
+          )}
+          <Button onClick={startNewOrder} disabled={busy || cashPending} sx={{ mt: 2 }}>
             {t("staffCheckout.newOrder")}
           </Button>
         </Paper>
@@ -244,7 +345,11 @@ const StaffCheckout = ({ pdaMode = false }) => {
             <Typography variant="h6" sx={{ mb: 2 }}>
               {t("customer.menu.browse")}
             </Typography>
-            <ProductCatalog onAddToCart={addItem} disabled={locked} />
+            <ProductCatalog
+              onAddToCart={addItem}
+              disabled={locked}
+              storeId={storeId}
+            />
           </Paper>
 
           <Paper sx={{ p: 2, mb: 3 }}>
@@ -326,6 +431,7 @@ const StaffCheckout = ({ pdaMode = false }) => {
                   label={t("staffCheckout.paymentMode")}
                   value={paymentMode}
                   onChange={(event) => setPaymentMode(event.target.value)}
+                  disabled={busy}
                   size="small"
                   sx={{ minWidth: 220 }}
                 >
@@ -336,7 +442,7 @@ const StaffCheckout = ({ pdaMode = false }) => {
                   ))}
                 </TextField>
                 <Button variant="contained" onClick={checkout} disabled={busy}>
-                  {t("staffCheckout.checkout")}
+                  {t(busy ? "staffCheckout.checkingOut" : "staffCheckout.checkout")}
                 </Button>
               </Box>
             </Paper>

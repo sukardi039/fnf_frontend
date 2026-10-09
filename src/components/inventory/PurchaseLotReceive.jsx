@@ -10,6 +10,7 @@ import {
   TextField,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import { HeaderBar, LoadingState } from "../common";
 import { useStoreLocation } from "../../context/storeLocationContext";
 import { request } from "../../helpers/axios_helper";
@@ -18,7 +19,12 @@ import { fetchActiveProducts } from "../catalog/productApi";
 
 const PurchaseLotReceive = () => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { storeId } = useStoreLocation();
+  const record = location.state?.record;
+  const isAmend = location.pathname.endsWith("/amend");
+  const canAmend = isAmend && record?.amendable === true;
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [vendors, setVendors] = useState([]);
@@ -27,17 +33,20 @@ const PurchaseLotReceive = () => {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState({});
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     storeId,
-    supplierId: "",
-    skuId: "",
-    supplierLotRef: "",
-    quantity: "",
-    uom: "",
-    totalCost: "",
-    receivedAt: toLocalISO().slice(0, 16),
-    expiryDate: "",
-  });
+    supplierId: record?.supplierId || "",
+    skuId: record?.skuId || "",
+    supplierLotRef: record?.supplierLotRef || "",
+    quantity: record?.receivedQuantity ?? record?.quantity ?? "",
+    uom: record?.uom || "",
+    totalCost: record?.totalCost ?? "",
+    receivedAt: record?.receivedAt
+      ? toLocalISO(record.receivedAt).slice(0, 16)
+      : toLocalISO().slice(0, 16),
+    expiryDate: record?.expiryDate || "",
+  }));
+  const isFormLocked = isAmend && !canAmend;
 
   useEffect(() => {
     let active = true;
@@ -134,8 +143,8 @@ const PurchaseLotReceive = () => {
     setResult(null);
     try {
       const response = await request(
-        "POST",
-        "/api/lots/receive",
+        isAmend ? "PUT" : "POST",
+        isAmend ? `/api/lots/${record.lotId}` : "/api/lots/receive",
         {
           storeId,
           supplierId: form.supplierId.trim(),
@@ -156,7 +165,8 @@ const PurchaseLotReceive = () => {
       setResult(response.data);
     } catch (requestError) {
       setError(
-        requestError?.response?.data?.message || t("purchaseLot.receiveFailed"),
+        requestError?.response?.data?.message ||
+          t(isAmend ? "purchaseLot.amendFailed" : "purchaseLot.receiveFailed"),
       );
     } finally {
       setSaving(false);
@@ -170,10 +180,18 @@ const PurchaseLotReceive = () => {
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <HeaderBar
-        title={t("purchaseLot.title")}
+        title={t(isAmend ? "purchaseLot.amendTitle" : "purchaseLot.title")}
         subtitle={t("purchaseLot.subtitle")}
+        showBackButton
+        onBack={() => navigate("/inventory/lots")}
+        backLabel={t("basic.back")}
       />
 
+      {isFormLocked && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {t("inventory.amendNotAllowed")}
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -181,7 +199,7 @@ const PurchaseLotReceive = () => {
       )}
       {result && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          {t("purchaseLot.received", {
+          {t(isAmend ? "purchaseLot.amended" : "purchaseLot.received", {
             lotId: result.lotId,
             quantity: result.availableQuantity,
             movementId: result.inventoryMovementId,
@@ -206,6 +224,7 @@ const PurchaseLotReceive = () => {
             value={form.supplierId}
             label={t("purchaseLot.supplierId")}
             onChange={handleSupplierChange}
+            disabled={isFormLocked}
           >
             {vendors.map((vendor) => (
               <MenuItem
@@ -230,6 +249,7 @@ const PurchaseLotReceive = () => {
           helperText={errors.skuId}
           required
           fullWidth
+          disabled={isFormLocked}
         >
           {products.map((product) => (
             <MenuItem key={product.skuId} value={product.skuId}>
@@ -244,6 +264,7 @@ const PurchaseLotReceive = () => {
           onChange={handleChange}
           inputProps={{ maxLength: 100 }}
           fullWidth
+          disabled={isFormLocked}
         />
         <TextField
           label={t("purchaseLot.quantity")}
@@ -256,6 +277,7 @@ const PurchaseLotReceive = () => {
           helperText={errors.quantity}
           required
           fullWidth
+          disabled={isFormLocked}
         />
         <TextField
           label={t("purchaseLot.uom")}
@@ -263,6 +285,7 @@ const PurchaseLotReceive = () => {
           inputProps={{ readOnly: true }}
           required
           fullWidth
+          disabled={isFormLocked}
         />
         <TextField
           label={t("purchaseLot.totalCost")}
@@ -275,6 +298,7 @@ const PurchaseLotReceive = () => {
           helperText={errors.totalCost}
           required
           fullWidth
+          disabled={isFormLocked}
         />
         <TextField
           label={t("purchaseLot.receivedAt")}
@@ -287,6 +311,7 @@ const PurchaseLotReceive = () => {
           helperText={errors.receivedAt}
           required
           fullWidth
+          disabled={isFormLocked}
         />
         <TextField
           label={t("purchaseLot.expiryDate")}
@@ -296,16 +321,17 @@ const PurchaseLotReceive = () => {
           onChange={handleChange}
           InputLabelProps={{ shrink: true }}
           fullWidth
+          disabled={isFormLocked}
         />
       </Box>
 
       <Button
         type="submit"
         variant="contained"
-        disabled={saving}
+        disabled={saving || isFormLocked}
         sx={{ mt: 3 }}
       >
-        {t("purchaseLot.receive")}
+        {t(isAmend ? "inventory.amend" : "purchaseLot.receive")}
       </Button>
     </Box>
   );

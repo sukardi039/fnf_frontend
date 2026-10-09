@@ -20,6 +20,7 @@ export default function CheckoutCartItems({
   onRemove,
   onUpdateQuantity,
   disabled = false,
+  editingDisabled = false,
   onSubmit,
   submitLabel,
   submitDisabled = false,
@@ -52,7 +53,7 @@ export default function CheckoutCartItems({
                     product: item.productName,
                   })}
                   onClick={() => onRemove?.(item.skuId)}
-                  disabled={disabled}
+                  disabled={disabled || editingDisabled}
                 >
                   <DeleteIcon />
                 </IconButton>
@@ -71,7 +72,7 @@ export default function CheckoutCartItems({
                   onUpdateQuantity?.(item.skuId, event.target.value)
                 }
                 inputProps={{ min: 0.001, step: "0.001" }}
-                disabled={disabled}
+                disabled={disabled || editingDisabled}
                 sx={{ width: 110, mr: 6 }}
               />
             </ListItem>
@@ -111,6 +112,7 @@ CheckoutCartItems.propTypes = {
   onRemove: PropTypes.func,
   onUpdateQuantity: PropTypes.func,
   disabled: PropTypes.bool,
+  editingDisabled: PropTypes.bool,
   onSubmit: PropTypes.func,
   submitLabel: PropTypes.node,
   submitDisabled: PropTypes.bool,

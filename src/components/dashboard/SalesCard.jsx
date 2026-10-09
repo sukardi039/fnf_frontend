@@ -9,14 +9,11 @@ import {
 import { PointOfSale as PointOfSaleIcon } from "@mui/icons-material";
 import PropTypes from "prop-types";
 import { useTranslation } from "react-i18next";
-import { getDailySummary } from "../../helpers/reporting_helper";
+import {
+  formatReportMoney,
+  getDailySummary,
+} from "../../helpers/reporting_helper";
 import LoadingState from "../common/LoadingState";
-
-const formatMoney = (money) => {
-  if (!money || typeof money.amount !== "number") return "-";
-  const value = money.amount.toFixed(2);
-  return money.currency ? `${money.currency} ${value}` : value;
-};
 
 const SalesCard = ({ date, storeId }) => {
   const { t } = useTranslation();
@@ -57,20 +54,28 @@ const SalesCard = ({ date, storeId }) => {
     ? [
         {
           label: t("dailySummary.grossSales"),
-          value: formatMoney(summary.grossSales),
+          value: formatReportMoney(summary.grossSales, summary.currency),
         },
         {
           label: t("dailySummary.netSales"),
-          value: formatMoney(summary.netSales),
+          value: formatReportMoney(summary.netSales, summary.currency),
         },
         {
           label: t("dailySummary.shrinkageCost"),
-          value: formatMoney(summary.shrinkageCost),
+          value: formatReportMoney(summary.shrinkageCost, summary.currency),
         },
         {
           label: t("dailySummary.recoverySales"),
-          value: formatMoney(summary.recoverySales),
+          value: formatReportMoney(summary.recoverySales, summary.currency),
         },
+        ...(summary.transactionCount === undefined
+          ? []
+          : [
+              {
+                label: t("dailySummary.transactionCount"),
+                value: String(summary.transactionCount),
+              },
+            ]),
         {
           label: t("dailySummary.paymentSuccessRate"),
           value: `${Math.round((summary.paymentSuccessRate || 0) * 100)}%`,

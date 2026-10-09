@@ -1,0 +1,31 @@
+export const pickupOrder = {
+  transactionId: "TX-1",
+  storeId: "STORE-1",
+  channel: "MOBILE_ORDER",
+  paymentMode: "E_PAYMENT",
+  state: "PAYMENT_SUCCESS",
+  paymentStatus: "SUCCESS",
+  preparationStatus: "NOT_STARTED",
+  amount: "18.00",
+  currency: "MYR",
+  createdAt: "2026-10-09T03:00:00Z",
+  items: [{
+    saleLineId: "LINE-1",
+    skuId: "APPLE",
+    productName: "Apples",
+    quantity: 3,
+    uom: "EA",
+    lotTracked: true,
+    allocations: [],
+    availableLots: [
+      { lotId: "LOT-1", availableQuantity: 2, uom: "EA" },
+      { lotId: "LOT-2", availableQuantity: 5, uom: "EA" },
+    ],
+  }],
+  actions: {
+    canAllocateLots: true,
+    canStartPreparation: true,
+    canMarkReady: false,
+    canHandover: false,
+  },
+};

@@ -5,8 +5,9 @@ This document maps the implemented frontend features to their menu sections acro
 ## GPS-first store selection
 
 The dashboard, inventory operations, staff checkout, customer cart checkout,
-transformation batches/approvals, daily summary, reconciliation and TV dashboard
-identify their store from a fresh device GPS location before loading store data.
+transformation batches/approvals, customer browse/cart, daily summary,
+reconciliation and TV dashboard identify their store from a fresh device GPS
+location before loading store data.
 The nearest active store with valid latitude/longitude is selected only when it
 is within **100 metres**, inclusive. The authenticated session's assigned store
 and a single-store list are not used as automatic substitutes for GPS.
@@ -21,6 +22,8 @@ store data, forms, carts and results are not reused for another store.
 Store administration remains unrestricted. Company scoping and backend
 authorization still apply; GPS selection is not an authorization mechanism.
 Browsers require location permission and a secure context (HTTPS or localhost).
+Customer photo matching uses this selected store as a catalog filter; the fruit
+photo never determines the store.
 
 ## Shared checkout browse/cart experience
 
@@ -31,6 +34,13 @@ uses the channel selected or allowed by that surface: customer mobile sends
 `MOBILE_ORDER`, web checkout can select a channel, and PDA checkout is fixed to
 `STAFF_ASSISTED`. Store scope, customer identity, payment choices, server quotes
 and backend authorization remain specific to each flow.
+
+The shared product catalog also supports photo matching on customer mobile and
+staff checkout browse surfaces. Selecting or taking a photo submits it
+immediately using the GPS-selected (or manually selected fallback) store.
+Matches remain suggestions; adding a product to the cart is still an explicit
+customer/staff action. Tapping the camera icon again clears the photo and returns
+to the full catalog.
 
 ## Web System (`/src/layouts/components/Sidebar.jsx`)
 
@@ -64,8 +74,10 @@ and backend authorization remain specific to each flow.
 
 | Function             | Route                        | Menu Section |
 | -------------------- | ---------------------------- | ------------ |
-| Purchase Lot Receive | `/inventory/lots/receive`    | Inventory    |
-| Loss Event           | `/inventory/loss-events/new` | Inventory    |
+| Purchase Lots        | `/inventory/lots`            | Inventory    |
+| Receive Purchase Lot | `/inventory/lots/new`        | Inventory    |
+| Loss Events          | `/inventory/loss-events`     | Inventory    |
+| Record Loss          | `/inventory/loss-events/new` | Inventory    |
 | Stock View           | `/inventory/stock-view`      | Inventory    |
 
 ### Checkout
@@ -73,8 +85,17 @@ and backend authorization remain specific to each flow.
 | Function        | Route                       | Menu Section |
 | --------------- | --------------------------- | ------------ |
 | Staff Checkout  | `/checkout/staff`           | Checkout     |
+| Pickup Orders   | `/checkout/pickup`          | Checkout     |
 | Refund Request  | `/checkout/refunds/new`     | Checkout     |
 | Refund Approval | `/checkout/refunds/approve` | Checkout     |
+
+Web/PDA Staff Checkout keeps cash and pay-at-counter transactions pending until
+staff explicitly confirm receipt of the full amount with a confirmation note.
+The existing cash-confirmation endpoint updates the original transaction;
+confirmation is not physical handover. Failed unchanged confirmation retries
+reuse the idempotency key, and a pending transaction cannot be cleared using
+Start New Order. Pending state is not yet recoverable through this screen after
+refresh/navigation.
 
 ### Transformation
 
@@ -101,9 +122,17 @@ Bottom navigation tabs:
 | ------ | ----------- | ------------------------------------------------------------------------------ |
 | Verify | `/pda/home` | Scan collection token, resolve transaction, confirm handover (`PdaAccessHome`) |
 | Checkout | `/pda/checkout` | GPS-scoped staff-assisted checkout: create a cart, add products, review the authoritative quote, and initiate payment |
+| Pickup | `/pda/pickup` | Store-scoped existing mobile orders: review lines, allocate lots, prepare, verify collection token and hand over |
 | Me     | `/pda/me`   | PDA user profile and logout (`PdaMe`)                                          |
 
 The PDA login gate is at `/pda/login` and is not part of the bottom navigation.
+
+Pickup Orders operates on the original customer transaction; it does not create
+a second cart or charge. Staff Checkout offers only counter-sale channels
+(`STAFF_ASSISTED` and `STORE_SELF_SELECT`). Pickup preparation is tracked
+separately from payment. Both web and PDA pickup screens require the new backend
+contract in [pickup-orders.md](backend/pickup-orders.md); this frontend change
+does not implement those backend endpoints.
 
 ## Customer Mobile (`/src/components/customer/CustomerShell.jsx`)
 
@@ -117,6 +146,32 @@ Bottom navigation tabs:
 | Profile | `/m/profile` | Customer profile info and logout (`CustomerProfile`)      |
 
 The customer auth gate is at `/m/auth` (`CustomerAuth`) and is not part of the bottom navigation. The root `/m` redirects to `/m/browse`.
+
+The Cart icon shows a badge with the number of selected item lines (distinct
+SKUs), not the total quantity. It updates when lines are added or removed,
+restores with the saved cart, and is hidden when the cart is empty.
+
+Customer Orders supports refresh/pagination, displays returned preparation
+status, and requests a short-lived collection QR/token for eligible mobile
+orders. The backend must supply `channel` and `preparationStatus` in customer
+history. Tokens are not persisted and disappear on expiry. The checkout result
+also exposes a returned payment link and collection-token action when eligible.
+
+Customer Cart uses the fixed `MOBILE_ORDER` channel and offers pay cash at
+collection (`PAY_AT_COUNTER`, default) or online payment (`E_PAYMENT`, currently
+labelled development-only because the gateway is mocked). It shows the
+pickup store, preparation/collection instructions and authoritative checkout
+state. Pending payment is not displayed as payment success. Server-side policy
+enforcement and payment continuation remain backend dependencies documented in
+[pickup-orders.md](backend/pickup-orders.md).
+
+Pay-at-collection orders are prepared only after customer arrival and cash
+receipt, not in advance. Customers present a short-lived arrival QR; staff open
+the existing order, verify arrival, confirm cash receipt, prepare, and finally
+verify a separate collection QR for handover. Arrival tokens do not prove payment
+or authorize goods release. These new arrival/pickup-cash endpoints require
+backend implementation. Future cooled-cabinet preparation/payment/unlocking is
+not implemented.
 
 ## TV Display
 

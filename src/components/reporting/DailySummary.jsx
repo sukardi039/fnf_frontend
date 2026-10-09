@@ -13,18 +13,16 @@ import { Assessment as AssessmentIcon, Refresh as RefreshIcon } from "@mui/icons
 import { useTranslation } from "react-i18next";
 import { PageHeader, LoadingState, EmptyState } from "../common";
 import { useStoreLocation } from "../../context/storeLocationContext";
-import { getDailySummary } from "../../helpers/reporting_helper";
-
-function formatMoney(money) {
-  if (!money || typeof money.amount !== "number") return "—";
-  const value = Number(money.amount).toFixed(2);
-  return money.currency ? `${money.currency} ${value}` : value;
-}
+import {
+  formatReportMoney,
+  getDailySummary,
+} from "../../helpers/reporting_helper";
+import { toLocalDate } from "../../helpers/date_helper";
 
 export default function DailySummary() {
   const { t } = useTranslation();
   const { storeId: selectedStoreId } = useStoreLocation();
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => toLocalDate());
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,12 +48,12 @@ export default function DailySummary() {
   const metrics = useMemo(() => {
     if (!summary) return [];
     return [
-      { label: t("dailySummary.grossSales"), value: formatMoney(summary.grossSales) },
-      { label: t("dailySummary.netSales"), value: formatMoney(summary.netSales) },
-      { label: t("dailySummary.shrinkageCost"), value: formatMoney(summary.shrinkageCost) },
-      { label: t("dailySummary.recoverySales"), value: formatMoney(summary.recoverySales) },
-      { label: t("dailySummary.inventoryValue"), value: formatMoney(summary.inventoryValue) },
-      { label: t("dailySummary.reconciliationVarianceCost"), value: formatMoney(summary.reconciliationVarianceCost) },
+      { label: t("dailySummary.grossSales"), value: formatReportMoney(summary.grossSales, summary.currency) },
+      { label: t("dailySummary.netSales"), value: formatReportMoney(summary.netSales, summary.currency) },
+      { label: t("dailySummary.shrinkageCost"), value: formatReportMoney(summary.shrinkageCost, summary.currency) },
+      { label: t("dailySummary.recoverySales"), value: formatReportMoney(summary.recoverySales, summary.currency) },
+      { label: t("dailySummary.inventoryValue"), value: formatReportMoney(summary.inventoryValue, summary.currency) },
+      { label: t("dailySummary.reconciliationVarianceCost"), value: formatReportMoney(summary.reconciliationVarianceCost, summary.currency) },
       { label: t("dailySummary.paymentSuccessRate"), value: `${Math.round((summary.paymentSuccessRate || 0) * 100)}%` },
     ];
   }, [summary, t]);

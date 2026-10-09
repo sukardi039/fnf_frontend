@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -34,6 +35,8 @@ export default function PdaAccessHome() {
   const deviceId = String(session.deviceId || "").trim();
   const staffId = String(session.staffId || "").trim();
   const hasScopedIdentity = Boolean(staffId);
+  const handoverEligible = transaction?.handoverEligible === true &&
+    transaction?.preparationStatus === "READY";
 
   const handleResolve = async (event) => {
     event.preventDefault();
@@ -65,7 +68,7 @@ export default function PdaAccessHome() {
   };
 
   const handleHandover = async () => {
-    if (!transaction?.handoverEligible) return;
+    if (!handoverEligible) return;
 
     setHandingOver(true);
     setError("");
@@ -194,15 +197,22 @@ export default function PdaAccessHome() {
             </Box>
 
             <Alert
-              severity={transaction.handoverEligible ? "success" : "warning"}
+              severity={handoverEligible ? "success" : "warning"}
               sx={{ mt: 2 }}
             >
-              {transaction.handoverEligible
+              {handoverEligible
                 ? t("pda.handover.eligible")
                 : t("pda.handover.notEligible")}
             </Alert>
 
-            {transaction.handoverEligible && (
+            <Button
+              component={RouterLink}
+              to={`/pda/pickup?${new URLSearchParams({ transactionId: transaction.transactionId })}`}
+              fullWidth sx={{ mt: 1 }}
+            >
+              {t("pickup.title")}
+            </Button>
+            {handoverEligible && (
               <Button
                 variant="contained"
                 color="success"

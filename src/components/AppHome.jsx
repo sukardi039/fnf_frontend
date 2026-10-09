@@ -6,6 +6,7 @@ import { useStoreLocation } from "../context/storeLocationContext";
 import DiscountCard from "./dashboard/DiscountCard";
 import SalesCard from "./dashboard/SalesCard";
 import InventoryCard from "./dashboard/InventoryCard";
+import { toLocalDate } from "../helpers/date_helper";
 
 const formatDateTime = (date, locale) =>
   date.toLocaleString(locale, {
@@ -29,7 +30,7 @@ const AppHome = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const todayIso = now.toISOString().split("T")[0];
+  const todayIso = toLocalDate(now);
 
   return (
     <Box>

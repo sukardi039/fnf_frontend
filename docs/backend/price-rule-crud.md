@@ -12,7 +12,8 @@ The frontend now supports full price-rule lifecycle management. A user can creat
 1. User navigates to **Catalog → Price Rules** (`/price-rules`).
 2. The list page calls `GET /api/price-rules` and displays all rules.
 3. User clicks **Add Price Rule** (`/price-rules/new`) and submits `POST /api/price-rules`.
-4. For each rule, user can:
+4. New rules are saved as `DRAFT`. Drafts can be edited and published; active rules become editable after expiry.
+5. For each rule, user can:
    - **Publish** → `POST /api/price-rules/{ruleId}/publish`
    - **Edit** → `PUT /api/price-rules/{ruleId}`
    - **Delete** → `DELETE /api/price-rules/{ruleId}`
@@ -72,7 +73,8 @@ Request body:
   "roundingMode": "HALF_UP",
   "startAt": "2026-10-01T00:00:00Z",
   "endAt": "2026-10-07T23:59:59Z",
-  "priority": 1
+  "priority": 1,
+  "status": "DRAFT"
 }
 ```
 
@@ -93,7 +95,7 @@ PUT /api/price-rules/{ruleId}
 
 Request body: same shape as create.
 
-Response body:
+Response body (example when updating an expired rule):
 
 ```json
 {
@@ -102,7 +104,40 @@ Response body:
 }
 ```
 
-Only rules that are not yet active should be editable, or the backend may enforce its own state rules.
+Draft rules can be edited and remain `DRAFT`. Active rules cannot be edited before their persisted `endAt`. Once an active rule passes `endAt`, it is `EXPIRED`; when the user saves edits, the frontend sends the changed fields and `"status": "DRAFT"` together in this `PUT`. Save the fields and status atomically and return `"status": "DRAFT"`. Merely opening or cancelling the edit form must not change the status.
+
+#### Required change to the existing status update guard
+
+The update handler must distinguish an `ACTIVE` rule still within its period from an expired rule. Keep rejecting edits to an `ACTIVE` rule whose persisted `endAt` has not passed, but allow an expired rule to transition to `DRAFT` through the existing `PUT` handler. No separate deactivate endpoint or additional approval/inactivation workflow is required.
+
+Use the persisted record—not the request's edited `endAt`—to decide whether the rule has expired. In the same database transaction:
+
+1. Load the rule by `ruleId` and verify it exists.
+2. If its status is `ACTIVE` and persisted `endAt` has not passed, reject the update.
+3. If its status is `ACTIVE` and persisted `endAt` has passed, allow the update only when the request asks for `status: "DRAFT"`.
+4. If its status is `EXPIRED`, allow the update and persist it as `DRAFT`.
+5. Keep edits to a `DRAFT` rule in `DRAFT`. Do not allow `PUT` to publish a rule by accepting `status: "ACTIVE"`; publishing remains separate.
+6. Persist edited fields and resulting status together, then return the resulting status.
+
+If validation fails, return the backend's normal conflict response and do not partially update either the fields or status. The frontend changes an expired rule to `DRAFT` only when the user saves edits; opening the form or cancelling it must not mutate the rule.
+
+Example request for an expired rule:
+
+```json
+{
+  "ruleName": "Lychee Weekend Promo",
+  "slogan": "Fresh lychee weekend special",
+  "skuId": "sku-456",
+  "discountType": "PERCENT",
+  "discountValue": 10,
+  "baseUnit": "CENT",
+  "roundingMode": "HALF_UP",
+  "startAt": "2026-10-01T00:00:00Z",
+  "endAt": "2026-10-07T23:59:59Z",
+  "priority": 1,
+  "status": "DRAFT"
+}
+```
 
 ### 4. Delete price rule
 
@@ -118,6 +153,8 @@ Response: `204 No Content` or `200 OK` with a simple confirmation body.
 POST /api/price-rules/{ruleId}/publish
 ```
 
+Accept only `DRAFT` rules whose `endAt` has not passed. On success, transition the rule to `ACTIVE`. Reject a draft whose end time has passed, and return `409 Conflict` when an active rule overlaps for the same SKU and priority.
+
 Response body:
 
 ```json
@@ -131,13 +168,13 @@ Publishing should validate conflicts (overlapping rules for the same SKU at the 
 
 ## Status values
 
-The frontend understands these statuses:
+The frontend lifecycle uses three statuses:
 
 - `DRAFT` — rule created but not active
-- `PENDING_APPROVAL` — rule awaiting approval
-- `ACTIVE` — rule is published and effective
+- `ACTIVE` — rule published, through its configured `endAt`
+- `EXPIRED` — previously active rule after `endAt`; becomes `DRAFT` when edits are saved
 
-Only non-`ACTIVE` rules show the **Publish** button in the frontend.
+Drafts can be edited and published until `endAt`. Active rules cannot be edited before `endAt`. The frontend derives `EXPIRED` when an `ACTIVE` record has passed `endAt`, so display and edit availability do not depend on a separate deactivation request or background job. The backend should also return `EXPIRED` for a previously published rule after `endAt`. Saving edits to an expired rule sends its edited fields and `DRAFT` status together through the existing update endpoint.
 
 ## Required backend changes
 
@@ -193,8 +230,11 @@ public class PriceRuleResponse {
 ### Business rules
 
 - A rule cannot overlap an existing active rule for the same `skuId` and `priority` unless the backend resolves precedence.
-- Publishing a rule should make it `ACTIVE` and validate conflicts.
-- Deleting an `ACTIVE` rule should deactivate it; the frontend expects the rule to disappear from the list or be filtered out.
+- Publishing a draft whose `endAt` has not passed makes it `ACTIVE` and validates conflicts.
+- An active rule remains `ACTIVE` through `endAt`, then becomes `EXPIRED`.
+- An expired rule transitions to `DRAFT` only when the user saves edits; opening or cancelling the edit form must not change its status.
+- Active rules cannot be edited before `endAt`.
+- Deleting a rule removes it from the list.
 - The backend must persist `slogan`, `baseUnit`, and `roundingMode` on price rules.
 - When applying a price rule, the discounted price must be rounded according to the rule's `baseUnit` and `roundingMode`:
   1. Compute the raw discounted price (`originalPrice - discount` or `originalPrice * (1 - discount/100)`).
@@ -223,7 +263,8 @@ Ensure all price-rule paths are under `/api` (no `/v1`).
 - [ ] `POST /api/price-rules` creates a new rule and returns `ruleId` and `status`.
 - [ ] `PUT /api/price-rules/{ruleId}` updates an existing rule.
 - [ ] `DELETE /api/price-rules/{ruleId}` removes the rule.
-- [ ] `POST /api/price-rules/{ruleId}/publish` publishes the rule and handles conflicts with `409`.
+- [ ] `POST /api/price-rules/{ruleId}/publish` publishes a `DRAFT` only through its `endAt`; conflicting activations return `409`.
+- [ ] `PUT /api/price-rules/{ruleId}` keeps draft edits in `DRAFT`, rejects edits to `ACTIVE` rules before `endAt`, and transitions an expired rule to `DRAFT` atomically when saved.
 - [ ] The list response includes `productName` so the frontend can display it without extra lookups.
 - [ ] Request and response bodies include `slogan`, `baseUnit`, and `roundingMode`.
 - [ ] Discounted-price calculation honors `baseUnit` and `roundingMode`.

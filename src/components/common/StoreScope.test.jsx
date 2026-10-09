@@ -20,7 +20,10 @@ vi.mock("@mui/icons-material", () => ({
   Inventory: () => null,
   Warning: () => null,
 }));
-vi.mock("../../helpers/reporting_helper", () => ({ getDailySummary: vi.fn() }));
+vi.mock("../../helpers/reporting_helper", async (importOriginal) => ({
+  ...await importOriginal(),
+  getDailySummary: vi.fn(),
+}));
 vi.mock("../../helpers/inventory_helper", () => ({ listInventorySnapshots: vi.fn() }));
 vi.mock("../catalog/productApi", () => ({
   listPriceRules: vi.fn().mockResolvedValue({ data: { items: [] } }),

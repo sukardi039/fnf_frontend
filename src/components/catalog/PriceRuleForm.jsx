@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { HeaderBar, LoadingState } from "../common";
 import {
@@ -9,6 +9,7 @@ import {
   fetchActiveProducts,
   updatePriceRule,
 } from "./productApi";
+import { getPriceRuleStatus } from "./priceRuleUtils";
 
 const DISCOUNT_TYPES = ["PERCENT", "FIXED_AMOUNT"];
 const BASE_UNITS = ["CENT", "TEN_CENT", "DOLLAR"];
@@ -26,50 +27,41 @@ const toDatetimeLocal = (isoString) => {
   }
 };
 
+const createInitialForm = (rule) => ({
+  ruleName: rule?.ruleName || "",
+  slogan: rule?.slogan || "",
+  skuId: rule?.skuId || "",
+  discountType: rule?.discountType || "PERCENT",
+  discountValue:
+    rule?.discountValue === undefined || rule?.discountValue === null
+      ? ""
+      : String(rule.discountValue),
+  baseUnit: rule?.baseUnit || "CENT",
+  roundingMode: rule?.roundingMode || "HALF_UP",
+  startAt: toDatetimeLocal(rule?.startAt),
+  endAt: toDatetimeLocal(rule?.endAt),
+  priority:
+    rule?.priority === undefined || rule?.priority === null
+      ? "0"
+      : String(rule.priority),
+});
+
 const PriceRuleForm = ({ priceRule }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const isEdit = Boolean(priceRule?.ruleId);
+  const location = useLocation();
+  const selectedRule = priceRule || location.state?.priceRule;
+  const isEdit = Boolean(selectedRule?.ruleId);
+  const status = getPriceRuleStatus(selectedRule);
+  const expiredRule = status === "EXPIRED";
+  const canEdit = !isEdit || ["DRAFT", "EXPIRED"].includes(status);
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [messageSeverity, setMessageSeverity] = useState("error");
   const [errors, setErrors] = useState({});
-  const [form, setForm] = useState({
-    ruleName: "",
-    slogan: "",
-    skuId: "",
-    discountType: "PERCENT",
-    discountValue: "",
-    baseUnit: "CENT",
-    roundingMode: "HALF_UP",
-    startAt: "",
-    endAt: "",
-    priority: "0",
-  });
-
-  useEffect(() => {
-    if (!isEdit) return;
-    setForm({
-      ruleName: priceRule.ruleName || "",
-      slogan: priceRule.slogan || "",
-      skuId: priceRule.skuId || "",
-      discountType: priceRule.discountType || "PERCENT",
-      discountValue:
-        priceRule.discountValue === undefined || priceRule.discountValue === null
-          ? ""
-          : String(priceRule.discountValue),
-      baseUnit: priceRule.baseUnit || "CENT",
-      roundingMode: priceRule.roundingMode || "HALF_UP",
-      startAt: toDatetimeLocal(priceRule.startAt),
-      endAt: toDatetimeLocal(priceRule.endAt),
-      priority:
-        priceRule.priority === undefined || priceRule.priority === null
-          ? "0"
-          : String(priceRule.priority),
-    });
-  }, [isEdit, priceRule]);
+  const [form, setForm] = useState(() => createInitialForm(selectedRule));
 
   useEffect(() => {
     let active = true;
@@ -92,6 +84,8 @@ const PriceRuleForm = ({ priceRule }) => {
       active = false;
     };
   }, [t]);
+
+  const isFormDisabled = !canEdit;
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -143,11 +137,17 @@ const PriceRuleForm = ({ priceRule }) => {
       startAt: new Date(form.startAt).toISOString(),
       endAt: new Date(form.endAt).toISOString(),
       priority: Number(form.priority),
+      status: "DRAFT",
     };
     try {
       const response = isEdit
-        ? await updatePriceRule(priceRule.ruleId, payload)
+        ? await updatePriceRule(selectedRule.ruleId, payload)
         : await createPriceRule(payload);
+      if (expiredRule && response.data?.status !== "DRAFT") {
+        setMessageSeverity("error");
+        setMessage(t("priceRule.expiredUpdateNotDraft"));
+        return;
+      }
       setMessageSeverity("success");
       setMessage(
         t(isEdit ? "priceRule.updated" : "priceRule.created", {
@@ -168,7 +168,9 @@ const PriceRuleForm = ({ priceRule }) => {
   };
 
   if (loadingProducts) {
-    return <LoadingState message={t("priceRule.loadingProducts")} />;
+    return (
+      <LoadingState message={t("priceRule.loadingProducts")} />
+    );
   }
 
   return (
@@ -184,6 +186,11 @@ const PriceRuleForm = ({ priceRule }) => {
       {message && (
         <Alert severity={messageSeverity} sx={{ mb: 2 }}>
           {message}
+        </Alert>
+      )}
+      {!canEdit && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t("priceRule.activeCannotEdit")}
         </Alert>
       )}
 
@@ -202,6 +209,7 @@ const PriceRuleForm = ({ priceRule }) => {
           onChange={handleChange}
           error={Boolean(errors.ruleName)}
           helperText={errors.ruleName}
+          disabled={isFormDisabled}
           required
           fullWidth
         />
@@ -211,6 +219,7 @@ const PriceRuleForm = ({ priceRule }) => {
           value={form.slogan}
           onChange={handleChange}
           placeholder={t("priceRule.sloganPlaceholder")}
+          disabled={isFormDisabled}
           fullWidth
         />
         <TextField
@@ -221,6 +230,7 @@ const PriceRuleForm = ({ priceRule }) => {
           onChange={handleChange}
           error={Boolean(errors.skuId)}
           helperText={errors.skuId}
+          disabled={isFormDisabled}
           required
           fullWidth
         >
@@ -236,6 +246,7 @@ const PriceRuleForm = ({ priceRule }) => {
           name="discountType"
           value={form.discountType}
           onChange={handleChange}
+          disabled={isFormDisabled}
           fullWidth
         >
           {DISCOUNT_TYPES.map((type) => (
@@ -253,6 +264,7 @@ const PriceRuleForm = ({ priceRule }) => {
           inputProps={{ min: 0.0001, step: "0.0001" }}
           error={Boolean(errors.discountValue)}
           helperText={errors.discountValue}
+          disabled={isFormDisabled}
           required
           fullWidth
         />
@@ -262,6 +274,7 @@ const PriceRuleForm = ({ priceRule }) => {
           name="baseUnit"
           value={form.baseUnit}
           onChange={handleChange}
+          disabled={isFormDisabled}
           required
           fullWidth
         >
@@ -277,6 +290,7 @@ const PriceRuleForm = ({ priceRule }) => {
           name="roundingMode"
           value={form.roundingMode}
           onChange={handleChange}
+          disabled={isFormDisabled}
           required
           fullWidth
         >
@@ -295,6 +309,7 @@ const PriceRuleForm = ({ priceRule }) => {
           InputLabelProps={{ shrink: true }}
           error={Boolean(errors.startAt)}
           helperText={errors.startAt}
+          disabled={isFormDisabled}
           required
           fullWidth
         />
@@ -307,6 +322,7 @@ const PriceRuleForm = ({ priceRule }) => {
           InputLabelProps={{ shrink: true }}
           error={Boolean(errors.endAt)}
           helperText={errors.endAt}
+          disabled={isFormDisabled}
           required
           fullWidth
         />
@@ -319,13 +335,18 @@ const PriceRuleForm = ({ priceRule }) => {
           inputProps={{ min: 0, step: 1 }}
           error={Boolean(errors.priority)}
           helperText={errors.priority}
+          disabled={isFormDisabled}
           required
           fullWidth
         />
       </Box>
 
       <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
-        <Button type="submit" variant="contained" disabled={saving}>
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={saving || isFormDisabled}
+        >
           {t("basic.save")}
         </Button>
         <Button variant="outlined" onClick={() => navigate("/price-rules")}>

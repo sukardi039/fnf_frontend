@@ -97,6 +97,10 @@ const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
+      if (window.location.pathname.startsWith("/m/")) {
+        setLoading(false);
+        return;
+      }
       const token = getAuthToken();
       const storedUserInfo = localStorage.getItem("user_info");
 
@@ -106,7 +110,7 @@ const AuthProvider = ({ children }) => {
           let userData = storedUserInfo ? JSON.parse(storedUserInfo) : {};
 
           // Try to fetch params to validate token
-          const response = await request("GET", "/api/params", {});
+          const response = await request("GET", "/api/params", {}, { authScope: "system" });
           if (response.data) {
             // Token is valid, restore authentication
             setIsAuthenticated(true);
@@ -130,7 +134,7 @@ const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      request("GET", "/api/params", {})
+      request("GET", "/api/params", {}, { authScope: "system" })
         // let url = "http://localhost:8080/api/params";
         // axios
         //   .get(url)

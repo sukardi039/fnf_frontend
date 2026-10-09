@@ -28,6 +28,15 @@ export const listProducts = (params = {}) => {
 
 export const fetchActiveProducts = () => listProducts({ active: true });
 
+export const matchProductsByImage = (photo, storeId) => {
+  const formData = new FormData();
+  formData.append("photo", photo);
+  formData.append("storeId", storeId);
+  return catalogRequest("POST", "/products/match-by-image", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 export const fetchProductFormats = (active = true) => {
   const query = new URLSearchParams();
   if (active !== undefined) query.set("active", String(active));

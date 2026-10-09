@@ -13,6 +13,11 @@ All FnF routes use the `/api/v1` prefix.
 - Checkout: `/carts`, `/carts/{cartId}`, `/carts/{cartId}/items`, `/carts/{cartId}/items/{cartItemId}`, `/quotes/{quoteId}`, `/checkout`, and `/transactions/{transactionId}/confirm-cash`.
 - Payments and refunds: `/payments/{transactionId}/webhook`, `/refunds`, refund approval, and `/payment-settlements` for daily settlement reconciliation.
 - Fulfillment: collection-token issuance, PDA scan resolution, lot allocation, and handover under `/transactions` and `/pda`. Lot-tracked SKUs require staff-selected lot fulfillment before handover; the PDA flow is limited to online (`MOBILE_ORDER`) transactions.
+- Pickup management: the frontend's shared `/pickup-orders` queue, detail,
+  preparation, allocation, verification and handover APIs are **pending backend
+  implementation**. See [the pickup backend change request](../backend/pickup-orders.md)
+  for the exact `/api` contract and required enhancements to customer history
+  and legacy PDA eligibility. These are not existing deployed v1 endpoints.
 - Transformation: `GET /transformation-recipes`, recipe creation/activation, and transformation posting/approval.
 - Reporting and reconciliation: `/reports/daily-summary` and reconciliation submit/finalize/reopen.
 

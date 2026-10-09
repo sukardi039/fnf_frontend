@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import PropTypes from "prop-types";
 import {
   Alert,
   Box,
@@ -6,44 +7,37 @@ import {
   Checkbox,
   FormControlLabel,
   TextField,
+  Typography,
 } from "@mui/material";
 import { MyLocation as GpsIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { HeaderBar } from "../common";
-import { createStore, updateStore } from "../../helpers/store_api";
+import { createStore, getStore, updateStore } from "../../helpers/store_api";
+import { emptyBusinessHours, validateBusinessHours, WEEKDAYS } from "../../helpers/store_hours_helper";
 
 const StoreForm = ({ store, onCancel }) => {
+  return <StoreFormFields key={store?.storeId || "new"} store={store} onCancel={onCancel} />;
+};
+
+const StoreFormFields = ({ store, onCancel }) => {
   const { t } = useTranslation();
   const isEdit = Boolean(store);
-  const [form, setForm] = useState({
-    storeId: "",
-    storeName: "",
-    companyId: "",
-    timezone: "Asia/Singapore",
-    address: "",
-    latitude: "",
-    longitude: "",
-    active: true,
-  });
+  const [form, setForm] = useState(() => ({
+    storeId: store?.storeId || "",
+    storeName: store?.storeName || "",
+    companyId: store?.companyId || "",
+    timezone: store?.timezone || "Asia/Singapore",
+    address: store?.address || "",
+    latitude: store?.latitude ?? "",
+    longitude: store?.longitude ?? "",
+    active: store?.active !== false,
+    businessHours: store?.businessHours || emptyBusinessHours(),
+  }));
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (store) {
-      setForm({
-        storeId: store.storeId || "",
-        storeName: store.storeName || "",
-        companyId: store.companyId || "",
-        timezone: store.timezone || "Asia/Singapore",
-        address: store.address || "",
-        latitude: store.latitude ?? "",
-        longitude: store.longitude ?? "",
-        active: store.active !== false,
-      });
-    }
-  }, [store]);
+  const [saveNeedsReload, setSaveNeedsReload] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -68,6 +62,17 @@ const StoreForm = ({ store, onCancel }) => {
     }
     if (!form.timezone.trim()) {
       nextErrors.timezone = t("storeList.validation.timezoneRequired");
+    } else {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: form.timezone.trim() }).format();
+      } catch {
+        nextErrors.timezone = t("storeList.validation.timezoneInvalid");
+      }
+    }
+    try {
+      validateBusinessHours(form.businessHours);
+    } catch (hoursError) {
+      nextErrors.businessHours = t(hoursError.message);
     }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -103,6 +108,7 @@ const StoreForm = ({ store, onCancel }) => {
 
     setLoading(true);
     setError("");
+    let saved = false;
     try {
       const payload = {
         storeId: form.storeId.trim(),
@@ -113,6 +119,7 @@ const StoreForm = ({ store, onCancel }) => {
         latitude: form.latitude ? Number(form.latitude) : undefined,
         longitude: form.longitude ? Number(form.longitude) : undefined,
         active: form.active,
+        businessHours: form.businessHours,
       };
 
       if (isEdit) {
@@ -120,12 +127,32 @@ const StoreForm = ({ store, onCancel }) => {
       } else {
         await createStore(payload);
       }
+      saved = true;
+      const response = await getStore(payload.storeId);
+      const returnedHours = validateBusinessHours(response?.data?.businessHours);
+      const signature = (periods) => JSON.stringify(periods.map(({ opensAt, closesAt }) =>
+        ({ opensAt, closesAt })).sort((left, right) => left.opensAt.localeCompare(right.opensAt)));
+      if (!WEEKDAYS.every((day) =>
+        signature(returnedHours[day]) === signature(payload.businessHours[day]))) {
+        throw new Error("storeList.hoursUnconfirmed");
+      }
       onCancel(true);
     } catch (err) {
-      setError(err?.response?.data?.message || t("storeList.saveFailed"));
+      setSaveNeedsReload(saved);
+      setError(saved ? t("storeList.hoursUnconfirmed") : err?.response?.data?.message ||
+        (err?.message?.startsWith("storeList.") ? t(err.message) : err?.message) ||
+        t("storeList.saveFailed"));
     } finally {
       setLoading(false);
     }
+  };
+
+  const changeHours = (day, periods) => {
+    setForm((current) => ({
+      ...current, businessHours: { ...current.businessHours, [day]: periods },
+    }));
+    setErrors((current) => ({ ...current, businessHours: "" }));
+    setError("");
   };
 
   return (
@@ -229,6 +256,45 @@ const StoreForm = ({ store, onCancel }) => {
         />
       </Box>
 
+      <Box sx={{ mt: 3, maxWidth: 880 }}>
+        <Typography variant="h6">{t("storeList.businessHours")}</Typography>
+        <Typography sx={{ mb: 2 }}>{t("storeList.hoursHint")}</Typography>
+        {!store?.businessHours && isEdit && (
+          <Alert severity="warning" sx={{ mb: 2 }}>{t("storeList.hoursMissing")}</Alert>
+        )}
+        {errors.businessHours && <Alert severity="error">{errors.businessHours}</Alert>}
+        {WEEKDAYS.map((day) => {
+          const periods = Array.isArray(form.businessHours[day]) ? form.businessHours[day] : [];
+          return (
+            <Box key={day} role="group" aria-label={t(`storeList.weekdays.${day}`)} sx={{ mb: 2 }}>
+              <Typography fontWeight={700}>{t(`storeList.weekdays.${day}`)}</Typography>
+              {periods.length === 0 && <Typography>{t("storeList.closed")}</Typography>}
+              {periods.map((period, index) => (
+                <Box key={index} sx={{ display: "flex", gap: 1, my: 1, flexWrap: "wrap" }}>
+                  {["opensAt", "closesAt"].map((field) => (
+                    <TextField
+                      key={field} type="time" size="small" value={period[field]}
+                      label={t(`storeList.${field}`)}
+                      slotProps={{ inputLabel: { shrink: true } }}
+                      disabled={loading}
+                      onChange={(event) => changeHours(day, periods.map((entry, entryIndex) =>
+                        entryIndex === index ? { ...entry, [field]: event.target.value } : entry))}
+                    />
+                  ))}
+                  <Button disabled={loading} onClick={() => changeHours(day,
+                    periods.filter((_, entryIndex) => entryIndex !== index))}
+                    aria-label={t("storeList.removeHours", { day: t(`storeList.weekdays.${day}`), index: index + 1 })}
+                  >{t("basic.remove", "Remove")}</Button>
+                </Box>
+              ))}
+              <Button disabled={loading} onClick={() => changeHours(day,
+                [...periods, { opensAt: "", closesAt: "" }])}
+              >{t("storeList.addHours", { day: t(`storeList.weekdays.${day}`) })}</Button>
+            </Box>
+          );
+        })}
+      </Box>
+
       <Box
         sx={{ mt: 3, display: "flex", gap: 2, maxWidth: 880, flexWrap: "wrap" }}
       >
@@ -243,7 +309,7 @@ const StoreForm = ({ store, onCancel }) => {
             ? t("storeList.gettingGps")
             : t("storeList.getGpsCoordinates")}
         </Button>
-        <Button type="submit" variant="contained" disabled={loading}>
+        <Button type="submit" variant="contained" disabled={loading || saveNeedsReload}>
           {t("basic.save")}
         </Button>
         <Button
@@ -257,5 +323,24 @@ const StoreForm = ({ store, onCancel }) => {
     </Box>
   );
 };
+
+const formPropTypes = {
+  store: PropTypes.shape({
+    storeId: PropTypes.string,
+    storeName: PropTypes.string,
+    companyId: PropTypes.string,
+    timezone: PropTypes.string,
+    address: PropTypes.string,
+    latitude: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    longitude: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    active: PropTypes.bool,
+    businessHours: PropTypes.objectOf(PropTypes.arrayOf(PropTypes.shape({
+      opensAt: PropTypes.string.isRequired, closesAt: PropTypes.string.isRequired,
+    }))),
+  }),
+  onCancel: PropTypes.func.isRequired,
+};
+StoreForm.propTypes = formPropTypes;
+StoreFormFields.propTypes = formPropTypes;
 
 export default StoreForm;

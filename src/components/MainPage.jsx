@@ -28,8 +28,10 @@ import UomConversionList from "./catalog/UomConversionList";
 import ProductFormatList from "./catalog/ProductFormatList";
 import PurchaseLotReceive from "./inventory/PurchaseLotReceive";
 import LossEventForm from "./inventory/LossEventForm";
+import InventoryRecordList from "./inventory/InventoryRecordList";
 import StockView from "./inventory/StockView";
 import StaffCheckout from "./checkout/StaffCheckout";
+import PickupOrders from "./pickup/PickupOrders";
 import RefundRequestForm from "./checkout/RefundRequestForm";
 import RefundApprovalForm from "./checkout/RefundApprovalForm";
 import TransformationRecipeForm from "./transformation/TransformationRecipeForm";
@@ -89,12 +91,33 @@ function MainPage() {
           element={<ProductFormatList />}
         />
         <Route
+          path="/inventory/lots"
+          element={<StoreScope><InventoryRecordList kind="lots" /></StoreScope>}
+        />
+        <Route
+          path="/inventory/lots/new"
+          element={<StoreScope><PurchaseLotReceive /></StoreScope>}
+        />
+        <Route
+          path="/inventory/lots/amend"
+          element={<StoreScope><PurchaseLotReceive /></StoreScope>}
+        />
+        <Route
           path="/inventory/lots/receive"
           element={<StoreScope><PurchaseLotReceive /></StoreScope>}
+        />
+        <Route
+          path="/inventory/loss-events"
+          element={<StoreScope><InventoryRecordList kind="losses" /></StoreScope>}
+        />
+        <Route
+          path="/inventory/loss-events/amend"
+          element={<StoreScope><LossEventForm /></StoreScope>}
         />
         <Route path="/inventory/loss-events/new" element={<StoreScope><LossEventForm /></StoreScope>} />
         <Route path="/inventory/stock-view" element={<StoreScope><StockView /></StoreScope>} />
         <Route path="/checkout/staff" element={<StoreScope><StaffCheckout /></StoreScope>} />
+        <Route path="/checkout/pickup" element={<StoreScope><PickupOrders /></StoreScope>} />
         <Route path="/checkout/refunds/new" element={<RefundRequestForm />} />
         <Route
           path="/checkout/refunds/approve"

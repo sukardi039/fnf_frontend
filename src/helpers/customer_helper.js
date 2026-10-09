@@ -1,22 +1,24 @@
-import { request, setAuthHeader } from "./axios_helper";
+import { request, setCustomerAuthToken } from "./axios_helper";
 
 const API_BASE = "/api";
 
 export const registerCustomer = (data) =>
   request("POST", `${API_BASE}/auth/customers/register`, data, {
     skipAuthRedirect: true,
+    authScope: "customer",
     skipBackendErrorDialog: true,
   });
 
 export const loginCustomer = (data) =>
   request("POST", `${API_BASE}/auth/customers/login`, data, {
     skipAuthRedirect: true,
+    authScope: "customer",
     skipBackendErrorDialog: true,
   });
 
 export const storeCustomerSession = (response) => {
   // Tokens are issued via HttpOnly cookies when the backend supports secure sessions.
-  // We keep only non-sensitive profile data in localStorage.
+  // Keep the customer profile separate from staff/system credentials.
   const payload = response?.data || {};
   localStorage.setItem(
     "customer_info",
@@ -28,31 +30,18 @@ export const storeCustomerSession = (response) => {
     }),
   );
 
-  // Transitional fallback: if the backend still returns a body token, store it
-  // temporarily in sessionStorage (not localStorage) so the secret is not persisted
-  // across browser restarts.
+  // Transitional bearer tokens must never replace the system-user session.
   const token =
+    payload?.accessToken ||
     payload?.token ||
     response?.headers?.authorization ||
     response?.headers?.Authorization;
-  if (token) {
-    const bearer = token.replace(/^Bearer\s+/i, "");
-    try {
-      sessionStorage.setItem("auth_token", bearer);
-    } catch {
-      // ignore
-    }
-  }
+  setCustomerAuthToken(token || null);
 };
 
 export const clearCustomerSession = () => {
-  setAuthHeader(null);
+  setCustomerAuthToken(null);
   localStorage.removeItem("customer_info");
-  try {
-    sessionStorage.removeItem("auth_token");
-  } catch {
-    // ignore
-  }
 };
 
 export const getCustomerInfo = () => {

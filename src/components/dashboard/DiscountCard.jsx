@@ -12,6 +12,7 @@ import { LocalOffer as LocalOfferIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { listPriceRules } from "../catalog/productApi";
 import LoadingState from "../common/LoadingState";
+import { getPromotionDisplayItems } from "./promotionUtils";
 
 const formatDate = (value, locale = "default") => {
   if (!value) return "";
@@ -22,11 +23,6 @@ const formatDate = (value, locale = "default") => {
     day: "numeric",
   });
 };
-
-const isSameDay = (d1, d2) =>
-  d1.getFullYear() === d2.getFullYear() &&
-  d1.getMonth() === d2.getMonth() &&
-  d1.getDate() === d2.getDate();
 
 const DiscountCard = () => {
   const { t, i18n } = useTranslation();
@@ -62,39 +58,12 @@ const DiscountCard = () => {
     };
   }, [t]);
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-
-  const endWindow = useMemo(() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 2);
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }, [today]);
-
   const displayItems = useMemo(() => {
-    return rules
-      .filter((rule) => {
-        const start = rule.startAt ? new Date(rule.startAt) : null;
-        const end = rule.endAt ? new Date(rule.endAt) : null;
-        if (!start || Number.isNaN(start.getTime())) return false;
-        if (!end || Number.isNaN(end.getTime())) return false;
-        return end >= today && start <= endWindow;
-      })
-      .map((rule) => {
-        const start = new Date(rule.startAt);
-        const isToday = isSameDay(start, today);
-        return {
-          ...rule,
-          isToday,
-          displayDate: formatDate(rule.startAt, i18n.language),
-        };
-      })
-      .sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
-  }, [rules, today, endWindow, i18n.language]);
+    return getPromotionDisplayItems(rules).map((rule) => ({
+      ...rule,
+      displayDate: formatDate(rule.startAt, i18n.language),
+    }));
+  }, [rules, i18n.language]);
 
   const todayCount = displayItems.filter((item) => item.isToday).length;
 

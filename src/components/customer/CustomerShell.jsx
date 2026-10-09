@@ -9,6 +9,8 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   AppBar,
+  Alert,
+  Badge,
   BottomNavigation,
   BottomNavigationAction,
   Box,
@@ -35,6 +37,7 @@ import {
   clearCustomerSession,
   getCustomerInfo,
 } from "../../helpers/customer_helper";
+import { countIncompleteCustomerOrders } from "../../helpers/customer_cart_helper";
 
 function CustomerComingSoon() {
   const { t } = useTranslation();
@@ -134,8 +137,44 @@ export default function CustomerShell() {
   const [customer, setCustomer] = useState(() => getCustomerInfo());
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [orderCount, setOrderCount] = useState(null);
+  const [orderCountError, setOrderCountError] = useState(false);
   const { items, addItem, removeItem, updateQuantity, clearCart } =
     useCartState();
+
+  React.useEffect(() => {
+    let active = true;
+    let running = false;
+    if (!customer) return;
+    const refresh = async () => {
+      if (running) return;
+      running = true;
+      try {
+        const count = await countIncompleteCustomerOrders(customer.customerId);
+        if (active) {
+          setOrderCount(count);
+          setOrderCountError(false);
+        }
+      } catch {
+        if (active) {
+          setOrderCount(null);
+          setOrderCountError(true);
+        }
+      } finally {
+        running = false;
+      }
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("customer:orders:refresh", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("customer:orders:refresh", refresh);
+    };
+  }, [customer, location.pathname, items.length]);
 
   const handleRegister = async (data) => {
     setAuthLoading(true);
@@ -173,6 +212,8 @@ export default function CustomerShell() {
 
   const handleLogout = () => {
     clearCustomerSession();
+    setOrderCount(null);
+    setOrderCountError(false);
     setCustomer(null);
     navigate("/m/auth", { replace: true });
   };
@@ -212,6 +253,11 @@ export default function CustomerShell() {
       </AppBar>
 
       <Box component="main" sx={{ pt: 2 }}>
+        {orderCountError && (
+          <Alert severity="error" sx={{ mx: 2, mb: 2 }}>
+            {t("customer.orders.badgeLoadFailed", "Unable to update the incomplete order count.")}
+          </Alert>
+        )}
         <Routes>
           <Route
             path="/auth"
@@ -226,7 +272,11 @@ export default function CustomerShell() {
           />
           <Route
             path="/browse"
-            element={<CustomerBrowse onAddToCart={addItem} />}
+            element={
+              <StoreScope>
+                <CustomerBrowse onAddToCart={addItem} />
+              </StoreScope>
+            }
           />
           <Route
             path="/cart"
@@ -266,11 +316,27 @@ export default function CustomerShell() {
           />
           <BottomNavigationAction
             label={t("customer.menu.cart", "Cart")}
-            icon={<CartIcon />}
+            icon={
+              items.length > 0 ? (
+                <Badge
+                  badgeContent={items.length}
+                  color="error"
+                  max={Number.MAX_SAFE_INTEGER}
+                >
+                  <CartIcon />
+                </Badge>
+              ) : (
+                <CartIcon />
+              )
+            }
           />
           <BottomNavigationAction
             label={t("customer.menu.orders", "Orders")}
-            icon={<OrdersIcon />}
+            icon={orderCount > 0 ? (
+              <Badge badgeContent={orderCount} color="error" max={Number.MAX_SAFE_INTEGER}>
+                <OrdersIcon />
+              </Badge>
+            ) : <OrdersIcon />}
           />
           <BottomNavigationAction
             label={t("customer.menu.profile", "Profile")}

@@ -33,6 +33,19 @@ const isPdaPath = () =>
 const isTvPath = () =>
   typeof window !== "undefined" && window.location.pathname.startsWith("/tv");
 
+const isCustomerRequest = (config) =>
+  config.authScope === "customer" ||
+  (config.authScope !== "system" && typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/m/"));
+
+export const setCustomerAuthToken = (token) => {
+  if (token) {
+    window.sessionStorage.setItem("customer_auth_token", normalizeBearerToken(token));
+  } else {
+    window.sessionStorage.removeItem("customer_auth_token");
+  }
+};
+
 const isPdaRefreshEnabled = () =>
   String(import.meta.env.VITE_PDA_USE_REFRESH || "false").toLowerCase() ===
   "true";
@@ -208,7 +221,11 @@ const processQueue = (error, token = null) => {
 // Request interceptor: attach access token if present
 api.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
+    config.authScope = isCustomerRequest(config) ? "customer" : "system";
+    const token = config.authScope === "customer"
+      ? window.sessionStorage.getItem("customer_auth_token")
+      : getAuthToken();
+    if (config.authScope === "customer") delete config.headers.Authorization;
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
@@ -221,7 +238,8 @@ api.interceptors.response.use(
     const responseToken = extractTokenFromResponse(response);
     // Prefer cookies; only use body tokens as a transitional fallback.
     if (responseToken) {
-      setAuthHeader(responseToken);
+      if (isCustomerRequest(response.config)) setCustomerAuthToken(responseToken);
+      else setAuthHeader(responseToken);
     }
     return response;
   },
@@ -256,6 +274,13 @@ api.interceptors.response.use(
     const backendMessage = normalizeAxiosErrorMessage(error);
     // Fire and wait for UI acknowledgement before proceeding with recovery
     await tryShowBlockingError(backendMessage);
+
+    if (error.response?.status === 401 && isCustomerRequest(originalRequest)) {
+      setCustomerAuthToken(null);
+      window.localStorage.removeItem("customer_info");
+      if (!originalRequest.skipAuthRedirect) window.location.href = "/m/auth";
+      return Promise.reject(error);
+    }
 
     // PDA default behavior: no refresh cycle unless explicitly enabled.
     // When enabled, PDA follows the same refresh flow as web users.
@@ -344,6 +369,12 @@ export const request = (method, url, data, config = {}) => {
 
     // If 401 not handled by interceptor, clear token and redirect
     if (error.response && error.response.status === 401) {
+      if (isCustomerRequest(error.config || config)) {
+        setCustomerAuthToken(null);
+        window.localStorage.removeItem("customer_info");
+        window.location.href = "/m/auth";
+        throw error;
+      }
       setAuthHeader(null);
       redirectToLogin();
     }
