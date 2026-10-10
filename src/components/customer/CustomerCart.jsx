@@ -4,11 +4,10 @@ import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   Link,
-  MenuItem,
-  TextField,
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
@@ -16,8 +15,12 @@ import { LoadingState } from "../common";
 import CheckoutCartItems from "../checkout/CheckoutCartItems";
 import CollectionToken from "./CollectionToken";
 import PickupSchedule from "./PickupSchedule";
-import { formatPickupSlot, getPickupSlots } from "../../helpers/pickup_time_helper";
+import PickupLifecycleNotice from "./PickupLifecycleNotice";
+import { canContinuePickupPayment, isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
+import { formatPickupSlotWithDate, getPickupSlots } from "../../helpers/pickup_time_helper";
 import { useStoreLocation } from "../../context/storeLocationContext";
+import { getCustomerInfo } from "../../helpers/customer_helper";
+import { clearCheckoutAttempt, readCheckoutAttempt, saveCheckoutAttempt } from "../../helpers/customer_checkout_recovery";
 import {
   createCustomerCart,
   addCustomerCartItem,
@@ -34,16 +37,25 @@ export default function CustomerCart({
 }) {
   const { t } = useTranslation();
   const { storeId, store } = useStoreLocation();
+  const [recovery] = useState(() => {
+    const customerId = getCustomerInfo()?.customerId;
+    try {
+      return { customerId, attempt: readCheckoutAttempt(customerId), error: "" };
+    } catch (recoveryError) {
+      return { customerId, attempt: null, error: recoveryError.message };
+    }
+  });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => recovery.error
+    ? t(recovery.error.startsWith("customer.") ? recovery.error : "customer.cart.recoveryInvalid") : "");
   const [transaction, setTransaction] = useState(null);
-  const [paymentMode, setPaymentMode] = useState("PAY_AT_COUNTER");
-  const [attemptStarted, setAttemptStarted] = useState(false);
-  const attempt = useRef(null);
+  const [paymentMode, setPaymentMode] = useState(recovery.attempt?.paymentMode || "PAY_AT_COUNTER");
+  const [attemptStarted, setAttemptStarted] = useState(Boolean(recovery.attempt));
+  const attempt = useRef(recovery.attempt);
   const submitting = useRef(false);
   const [now, setNow] = useState(() => new Date());
   const [pickupChoice, setPickupChoice] = useState("");
-  const [lockedSlot, setLockedSlot] = useState(null);
+  const [lockedSlot, setLockedSlot] = useState(recovery.attempt?.pickupSlot || null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
@@ -61,7 +73,8 @@ export default function CustomerCart({
 
   const handleCheckout = async () => {
     if (submitting.current || transaction) return;
-    if (!storeId.trim() || items.length === 0) {
+    if (recovery.error) return;
+    if (!storeId.trim() || (!attempt.current && items.length === 0)) {
       setError(t("customer.cart.checkoutRequired"));
       return;
     }
@@ -76,7 +89,8 @@ export default function CustomerCart({
         if (!pickupSlot) throw new Error(t("customer.cart.pickupSlotUnavailable"));
         attempt.current = {
           pickupSlot,
-          storeId: storeId.trim(), paymentMode, items: items.map((item) => ({ ...item })),
+          storeId: storeId.trim(), paymentMode,
+          items: items.map(({ skuId, productName, uom, quantity }) => ({ skuId, productName, uom, quantity })),
           createKey: crypto.randomUUID(), checkoutKey: crypto.randomUUID(),
           itemKeys: items.map(() => crypto.randomUUID()), cartId: null, added: 0, quoteId: null,
         };
@@ -85,12 +99,14 @@ export default function CustomerCart({
       }
       const current = attempt.current;
       if (current.storeId !== storeId.trim()) throw new Error(t("customer.cart.storeChanged"));
+      saveCheckoutAttempt(recovery.customerId, current);
       if (!current.cartId) {
         const { data } = await createCustomerCart({
           storeId: current.storeId, channel: CHANNEL, customerId: null,
         }, current.createKey);
         if (!data?.cartId) throw new Error(t("customer.cart.checkoutFailed"));
         current.cartId = data.cartId;
+        saveCheckoutAttempt(recovery.customerId, current);
       }
       while (current.added < current.items.length) {
         const item = current.items[current.added];
@@ -101,6 +117,7 @@ export default function CustomerCart({
         if (!itemResponse.data?.quoteId) throw new Error(t("customer.cart.noQuote"));
         current.quoteId = itemResponse.data.quoteId;
         current.added += 1;
+        saveCheckoutAttempt(recovery.customerId, current);
       }
       const checkoutResponse = await checkoutCustomerCart({
         cartId: current.cartId,
@@ -120,6 +137,7 @@ export default function CustomerCart({
         setError(t("customer.cart.pickupScheduleUnconfirmed"));
       }
       onClear?.();
+      clearCheckoutAttempt(recovery.customerId);
     } catch (err) {
       setError(
         err?.response?.data?.message || err?.message || t("customer.cart.checkoutFailed"),
@@ -146,6 +164,12 @@ export default function CustomerCart({
           {error}
         </Alert>
       )}
+      {recovery.attempt && !transaction && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t("customer.cart.recoveredAttempt")}
+          <Link component={RouterLink} to="/m/orders" sx={{ ml: 1 }}>{t("collection.viewOrders")}</Link>
+        </Alert>
+      )}
 
       {transaction && (
         <Alert severity={paid ? "success" : paymentFailed ? "warning" : "info"} sx={{ mb: 2 }}>
@@ -155,21 +179,25 @@ export default function CustomerCart({
             state: transaction.state,
           })}
           <PickupSchedule order={transaction} />
+          <PickupLifecycleNotice order={transaction} />
           {!paid && !paymentFailed && <Typography>{t(transaction.paymentMode === "PAY_AT_COUNTER"
             ? "customer.cart.payAtCollectionInstructions" : "customer.cart.paymentUnconfirmed")}</Typography>}
-          {transaction.state === "EXPIRED" && <Typography>{t("customer.orders.expired")}</Typography>}
-          {transaction.payment?.redirectUrl && (
+          {transaction.state === "EXPIRED" && transaction.paymentStatus !== "SUCCESS" &&
+            <Typography>{t("customer.orders.expired")}</Typography>}
+          {transaction.payment?.redirectUrl && canContinuePickupPayment(transaction) && (
             <Link href={transaction.payment.redirectUrl} target="_blank" rel="noopener noreferrer" sx={{ ml: 1 }}>
               {t("staffCheckout.openPayment")}
             </Link>
           )}
           {transaction?.paymentMode === "PAY_AT_COUNTER" &&
+            !isPickupBlocked(transaction) &&
             transaction.state === "CASH_PENDING_CONFIRMATION" && (
               <CollectionToken transactionId={transaction.transactionId} purpose="arrival" />
             )}
         </Alert>
       )}
       {transaction && transaction.channel === "MOBILE_ORDER" &&
+        !isPickupBlocked(transaction) &&
         transaction.preparationStatus === "READY" &&
         ["PAYMENT_SUCCESS", "READY_FOR_HANDOVER"].includes(transaction.state) && (
           <CollectionToken key={transaction.transactionId} transactionId={transaction.transactionId} />
@@ -192,18 +220,24 @@ export default function CustomerCart({
             <Alert severity="error" sx={{ mt: 2 }}>{t("customer.cart.pickupHoursRequired")}</Alert>
           ) : (
             <>
-              <TextField
-                select fullWidth size="small" sx={{ mt: 2 }}
-                label={t("customer.cart.pickupTime")} value={displayedSlot?.pickupSlotStart || ""}
-                disabled={attemptStarted || slots.length === 0}
-                onChange={(event) => setPickupChoice(event.target.value)}
-              >
+              <Box role="group" aria-label={t("customer.cart.pickupTime")} sx={{ mt: 2 }}>
+                <Typography sx={{ mb: 1 }}>{t("customer.cart.pickupTime")}</Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                 {(lockedSlot ? [lockedSlot] : slots).map((slot) => (
-                  <MenuItem key={slot.pickupSlotStart} value={slot.pickupSlotStart}>
-                    {formatPickupSlot(slot)}
-                  </MenuItem>
+                  <Button
+                    key={slot.pickupSlotStart}
+                    type="button"
+                    variant={displayedSlot?.pickupSlotStart === slot.pickupSlotStart ? "contained" : "outlined"}
+                    aria-pressed={displayedSlot?.pickupSlotStart === slot.pickupSlotStart}
+                    disabled={attemptStarted}
+                    onClick={() => setPickupChoice(slot.pickupSlotStart)}
+                    sx={{ minHeight: 44 }}
+                  >
+                    {formatPickupSlotWithDate(slot)}
+                  </Button>
                 ))}
-              </TextField>
+                </Box>
+              </Box>
               <Typography sx={{ mt: 1 }}>{t("customer.cart.pickupRules", { timezone: store?.timezone })}</Typography>
               {displayedSlot && <PickupSchedule order={displayedSlot} />}
               {!attemptStarted && (!slots.length || !selectedSlot) && (
@@ -213,15 +247,27 @@ export default function CustomerCart({
               )}
             </>
           )}
-          <TextField
-            select fullWidth size="small" sx={{ mt: 2 }}
-            label={t("customer.cart.paymentChoice")} value={paymentMode}
-            disabled={attemptStarted}
-            onChange={(event) => setPaymentMode(event.target.value)}
-          >
-            <MenuItem value="PAY_AT_COUNTER">{t("customer.cart.payAtCollection")}</MenuItem>
-            <MenuItem value="E_PAYMENT">{t("customer.cart.payOnline")}</MenuItem>
-          </TextField>
+          <Box role="group" aria-label={t("customer.cart.paymentChoice")} sx={{ mt: 2 }}>
+            <Typography sx={{ mb: 1 }}>{t("customer.cart.paymentChoice")}</Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {[
+                { value: "PAY_AT_COUNTER", label: "customer.cart.payAtCollection" },
+                { value: "E_PAYMENT", label: "customer.cart.payOnline" },
+              ].map((method) => (
+                <Button
+                  key={method.value}
+                  type="button"
+                  variant={paymentMode === method.value ? "contained" : "outlined"}
+                  aria-pressed={paymentMode === method.value}
+                  disabled={attemptStarted}
+                  onClick={() => setPaymentMode(method.value)}
+                  sx={{ minHeight: 44 }}
+                >
+                  {t(method.label)}
+                </Button>
+              ))}
+            </Box>
+          </Box>
           <Typography sx={{ mt: 1 }}>{t(paymentMode === "PAY_AT_COUNTER"
             ? "customer.cart.payAtCollectionInstructions" : "customer.cart.pickupInstructions")}</Typography>
           {paymentMode === "E_PAYMENT" && (
@@ -231,13 +277,13 @@ export default function CustomerCart({
       </Card>
 
       <CheckoutCartItems
-        items={items}
+        items={recovery.attempt?.items || items}
         onRemove={attemptStarted ? undefined : onRemove}
         onUpdateQuantity={attemptStarted ? undefined : onUpdateQuantity}
         editingDisabled={attemptStarted}
         onSubmit={handleCheckout}
         submitLabel={t("customer.cart.checkout")}
-        submitDisabled={!storeId || Boolean(transaction) ||
+        submitDisabled={!storeId || Boolean(transaction) || Boolean(recovery.error) ||
           (!attemptStarted && (scheduleError || !selectedSlot))}
       />
       {attemptStarted && !transaction && (

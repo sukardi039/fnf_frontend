@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import PropTypes from "prop-types";
 import {
   Box,
+  Alert,
   Button,
   Divider,
   IconButton,
@@ -14,6 +15,8 @@ import {
 import { Delete as DeleteIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "../common";
+import ProductThumbnail from "../common/ProductThumbnail";
+import useProductPictures from "../../hooks/useProductPictures";
 
 export default function CheckoutCartItems({
   items,
@@ -26,6 +29,7 @@ export default function CheckoutCartItems({
   submitDisabled = false,
 }) {
   const { t } = useTranslation();
+  const { catalogPictures, pictureError } = useProductPictures(items);
   const totalItems = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity), 0),
     [items],
@@ -42,6 +46,7 @@ export default function CheckoutCartItems({
 
   return (
     <Box>
+      {pictureError && <Alert severity="warning" sx={{ mb: 1 }}>{t("customer.cart.picturesFailed")}</Alert>}
       <List disablePadding>
         {items.map((item, index) => (
           <React.Fragment key={item.skuId}>
@@ -59,6 +64,10 @@ export default function CheckoutCartItems({
                 </IconButton>
               }
             >
+              <ProductThumbnail
+                picture={item.productPicture || catalogPictures[item.skuId]}
+                alt={item.productName} sx={{ m: 1 }}
+              />
               <ListItemText
                 primary={item.productName}
                 secondary={`${item.quantity} ${item.uom}`}
@@ -73,7 +82,7 @@ export default function CheckoutCartItems({
                 }
                 inputProps={{ min: 0.001, step: "0.001" }}
                 disabled={disabled || editingDisabled}
-                sx={{ width: 110, mr: 6 }}
+                sx={{ width: { xs: 75, sm: 110 }, flexShrink: 0, ml: 1, mr: { xs: 0, sm: 6 } }}
               />
             </ListItem>
             {index < items.length - 1 && <Divider />}

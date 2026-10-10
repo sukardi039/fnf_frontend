@@ -1,18 +1,26 @@
 import React, { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import {
-  Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography,
+  Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, MenuItem, Stack, TextField, Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   allocatePickupLots, preparePickupOrder, verifyPickupCollection, handoverPickupOrder,
   recordPickupArrival, confirmPickupCash,
 } from "../../helpers/pickup_helper";
-import { buildPickupAllocations, pickupErrorMessage, validatePickupOrder } from "./pickupUtils";
+import { buildPickupAllocations, isLegacyPickupOrder, needsPickupReconciliation, pickupErrorMessage, validatePickupOrder } from "./pickupUtils";
 import PickupSchedule from "../customer/PickupSchedule";
+import PickupLifecycleNotice from "../customer/PickupLifecycleNotice";
+import { isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
+import { pickupCommandKey } from "../../helpers/pickup_command_helper";
+import { useCameraScanner } from "../../helpers/camera_scanner_helper";
+import PickupReconciliation from "./PickupReconciliation";
+import ProductThumbnail from "../common/ProductThumbnail";
+import useProductPictures from "../../hooks/useProductPictures";
 
 export default function PickupOrderDetails({ order, onChanged, onClose, onBusyChange }) {
   const { t } = useTranslation();
+  const { catalogPictures, pictureError } = useProductPictures(order.items);
   const [drafts, setDrafts] = useState(() => Object.fromEntries(
     order.items.filter((line) => line.lotTracked).map((line) => [
       line.saleLineId,
@@ -27,6 +35,20 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
   const [error, setError] = useState("");
   const [arrivalToken, setArrivalToken] = useState("");
   const [cashNote, setCashNote] = useState("");
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [customerPresent, setCustomerPresent] = useState(false);
+  const scanPurpose = useRef("arrival");
+  const { openScanner, scannerOverlay, scannerOpen } = useCameraScanner({
+    containerId: "pickup-order-camera",
+    normalize: false,
+    onScan: (token) => {
+      if (scanPurpose.current === "arrival") setArrivalToken(token);
+      else {
+        setQrToken(token);
+        setVerification(null);
+      }
+    },
+  });
   const mounted = useRef(true);
   const submitting = useRef(false);
   const pendingCommand = useRef(null);
@@ -44,7 +66,8 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
   }, [verification]);
 
   const run = async (operation) => {
-    if (submitting.current) return;
+    if (submitting.current || scannerOpen || needsRefresh ||
+        needsPickupReconciliation(order) || isPickupBlocked(order)) return;
     submitting.current = true;
     setBusy(true);
     onBusyChange(true);
@@ -54,6 +77,7 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
     } catch (requestError) {
       if (mounted.current) {
         setVerification(null);
+        setNeedsRefresh(true);
         setError(pickupErrorMessage(requestError, t));
       }
     } finally {
@@ -68,7 +92,9 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
   const commit = async (name, payload, execute) => {
     const signature = JSON.stringify({ name, payload });
     if (pendingCommand.current?.signature !== signature) {
-      pendingCommand.current = { signature, key: crypto.randomUUID() };
+      pendingCommand.current = {
+        signature, key: await pickupCommandKey(order.storeId, order.transactionId, name, payload),
+      };
     }
     const { data } = await execute(pendingCommand.current.key);
     validatePickupOrder(data, order.storeId, order.transactionId);
@@ -133,23 +159,65 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
         <Typography>{t("pickup.payment")}: {order.paymentStatus}</Typography>
         <Typography>{t("pickup.transactionState")}: {order.state}</Typography>
         <PickupSchedule order={order} />
+        <PickupLifecycleNotice order={order} />
+        <Typography fontWeight={700}>{order.currency} {order.amount}</Typography>
+        {order.paymentMode === "E_PAYMENT" && (
+          <Alert severity="warning" sx={{ my: 1 }}>{t("customer.cart.onlinePaymentMock")}</Alert>
+        )}
+        {order.state === "HANDED_OVER" && (
+          <Alert severity="success" sx={{ my: 1 }}>{t("pickup.completed")}</Alert>
+        )}
+        <PickupReconciliation order={order} onChanged={onChanged}
+          onBusyChange={(value) => { setBusy(value); onBusyChange(value); }} />
+        {!needsPickupReconciliation(order) && !isLegacyPickupOrder(order) &&
+          !isPickupBlocked(order) && order.state !== "HANDED_OVER" && (
+          <Alert severity="info" sx={{ my: 1 }}>{t(
+            ["EXPIRED", "CANCELLED", "REFUNDED"].includes(order.state) ? "pickup.terminalGuidance" :
+              order.actions.canRecordArrival ? "pickup.nextArrival" :
+                order.actions.canConfirmCash ? "pickup.nextCash" :
+                  order.paymentStatus !== "SUCCESS" ? "pickup.nextPayment" :
+                    order.preparationStatus === "READY" ? "pickup.nextCollection" :
+                      order.preparationStatus === "PREPARING" ? "pickup.nextReady" : "pickup.nextPrepare",
+          )}</Alert>
+        )}
         <Typography>{t(`pickup.status.${order.preparationStatus}`)}</Typography>
-        {order.paymentMode === "PAY_AT_COUNTER" && (
+        {isLegacyPickupOrder(order) && (
+          <Alert severity="warning" sx={{ my: 2 }}>{t("pickup.legacyReadOnly")}</Alert>
+        )}
+        {order.paymentMode === "PAY_AT_COUNTER" && !isLegacyPickupOrder(order) && (
           <>
             <Typography>{t("pickup.payAtCollectionHint")}</Typography>
             <Typography>{t(order.arrivalStatus === "ARRIVED" ? "pickup.arrived" : "pickup.awaitingArrival")}</Typography>
           </>
         )}
         {error && <Alert severity="error" sx={{ my: 2 }}>{error}</Alert>}
+        {needsRefresh && (
+          <Alert severity="warning" sx={{ my: 2 }}>
+            {t("pickup.refreshAfterFailure")}
+            <Button disabled={busy} onClick={onChanged}>{t("pickup.refresh")}</Button>
+          </Alert>
+        )}
+        <Box component="fieldset" disabled={busy || needsRefresh ||
+          needsPickupReconciliation(order) || isPickupBlocked(order)}
+          sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
         {order.actions.canRecordArrival && (
           <Box sx={{ my: 2 }}>
+            <Button disabled={busy} onClick={() => {
+              scanPurpose.current = "arrival";
+              openScanner();
+            }}>{t("pickup.scanArrival")}</Button>
             <TextField
               label={t("pickup.arrivalToken")} value={arrivalToken} fullWidth multiline
               disabled={busy} inputProps={{ maxLength: 2048 }}
               onChange={(event) => setArrivalToken(event.target.value)}
             />
+            <FormControlLabel
+              control={<Checkbox checked={customerPresent} disabled={busy}
+                onChange={(event) => setCustomerPresent(event.target.checked)} />}
+              label={t("pickup.customerPresent")}
+            />
             <Button
-              sx={{ mt: 1 }} disabled={busy || !arrivalToken.trim()}
+              sx={{ mt: 1 }} disabled={busy || !arrivalToken.trim() || !customerPresent}
               onClick={() => mutate("arrival", arrivalToken.trim(), (key) =>
                 recordPickupArrival(order.transactionId, order.storeId, arrivalToken.trim(), key))}
             >{t("pickup.recordArrival")}</Button>
@@ -179,10 +247,16 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
           </Box>
         )}
         <Box sx={{ display: "grid", gap: 2, my: 2 }}>
+          {pictureError && <Alert severity="warning">{t("customer.cart.picturesFailed")}</Alert>}
           {order.items.map((line) => (
             <Box key={line.saleLineId} sx={{ border: 1, borderColor: "divider", p: 2, borderRadius: 1 }}>
-              <Typography fontWeight={700}>{line.productName}</Typography>
-              <Typography>{line.skuId}: {line.quantity} {line.uom}</Typography>
+              <Box sx={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 1, alignItems: "center", mb: 1 }}>
+                <ProductThumbnail picture={line.productPicture || catalogPictures[line.skuId]} alt={line.productName} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography fontWeight={700} sx={{ overflowWrap: "anywhere" }}>{line.productName}</Typography>
+                  <Typography>{line.skuId}: {line.quantity} {line.uom}</Typography>
+                </Box>
+              </Box>
               {line.allocations.map((entry) => (
                 <Typography key={entry.lotId}>{t("pickup.allocated", {
                   lotId: entry.lotId, quantity: entry.quantity, uom: entry.uom,
@@ -243,6 +317,10 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
         <Typography color="text.secondary" sx={{ my: 2 }}>{t("pickup.handoverHint")}</Typography>
         {order.actions.canHandover && (
           <Box>
+            <Button disabled={busy} onClick={() => {
+              scanPurpose.current = "collection";
+              openScanner();
+            }}>{t("pickup.scanCollection")}</Button>
             <TextField
               label={t("pickup.collectionToken")} value={qrToken} fullWidth multiline
               disabled={busy} inputProps={{ maxLength: 2048 }}
@@ -257,7 +335,9 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
             {verification && <Alert severity="success" sx={{ mt: 2 }}>{t("pickup.verified")}</Alert>}
           </Box>
         )}
+        </Box>
         {busy && <Typography role="status" sx={{ mt: 1 }}>{t("pickup.saving")}</Typography>}
+        {scannerOverlay}
       </CardContent>
     </Card>
   );

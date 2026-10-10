@@ -1,7 +1,45 @@
+import { hasValidPickupLifecycle, isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
+import { hasValidReconciliation } from "../../helpers/pickup_reconciliation_helper";
+import { formatPickupSlotWithDate } from "../../helpers/pickup_time_helper";
+
+export const hasValidPickupSchedule = (order) => {
+  const dates = [order.pickupSlotStart, order.pickupSlotEnd, order.pickupExpiresAt];
+  if (!order.pickupTimezone ||
+      !dates.every((value) => typeof value === "string" && Number.isFinite(Date.parse(value))) ||
+      Date.parse(order.pickupSlotEnd) - Date.parse(order.pickupSlotStart) !== 30 * 60_000 ||
+      Date.parse(order.pickupExpiresAt) - Date.parse(order.pickupSlotStart) !== 60 * 60_000) return false;
+  try {
+    formatPickupSlotWithDate(order);
+    return true;
+  } catch (error) {
+    if (error instanceof RangeError) return false;
+    throw error;
+  }
+};
+
+export const isLegacyPickupOrder = (order) =>
+  order?.paymentMode === "CASH" ||
+  (order?.paymentMode === "PAY_AT_COUNTER" &&
+    order.preparationPolicy == null && order.arrivalStatus == null);
+
+const isTerminalPickupOrder = (order) =>
+  ["HANDED_OVER", "CANCELLED", "EXPIRED", "REFUNDED"].includes(order.state);
+
+export const needsPickupReconciliation = (order) =>
+  ((isLegacyPickupOrder(order) ||
+    (!order.pickupSlotStart && !order.pickupSlotEnd && !order.pickupExpiresAt)) &&
+    !isTerminalPickupOrder(order)) ||
+  (order.state === "EXPIRED" && order.paymentStatus === "SUCCESS");
+
+export const matchesPickupQueueView = (order, view) =>
+  view === "RECONCILIATION" ? needsPickupReconciliation(order) :
+    !isTerminalPickupOrder(order) && !needsPickupReconciliation(order);
+
 export function isPickupSummary(order, storeId) {
   return Boolean(
-    order && order.storeId === storeId && order.channel === "MOBILE_ORDER" &&
-    ["E_PAYMENT", "PAY_AT_COUNTER"].includes(order.paymentMode) &&
+    order && hasValidPickupLifecycle(order) && hasValidReconciliation(order) &&
+    order.storeId === storeId && order.channel === "MOBILE_ORDER" &&
+    ["E_PAYMENT", "PAY_AT_COUNTER", "CASH"].includes(order.paymentMode) &&
     typeof order.transactionId === "string" && order.transactionId.trim() &&
     typeof order.state === "string" && typeof order.paymentStatus === "string" &&
     ["NOT_STARTED", "PREPARING", "READY"].includes(order.preparationStatus) &&
@@ -9,9 +47,10 @@ export function isPickupSummary(order, storeId) {
     order.amount !== null && order.amount !== "" &&
     Number.isFinite(Number(order.amount)) && Number(order.amount) >= 0 &&
     Number.isFinite(Date.parse(order.createdAt)) &&
-    (order.paymentMode !== "PAY_AT_COUNTER" || (
+    (order.paymentMode !== "PAY_AT_COUNTER" || isLegacyPickupOrder(order) || (
       order.preparationPolicy === "ON_ARRIVAL" &&
-      ["EXPECTED", "ARRIVED"].includes(order.arrivalStatus)
+      (["EXPECTED", "ARRIVED"].includes(order.arrivalStatus) ||
+        (isTerminalPickupOrder(order) && order.arrivalStatus === "EXPIRED"))
     )),
   );
 }
@@ -44,6 +83,13 @@ export function validatePickupOrder(order, storeId, transactionId) {
     )
   ) {
     throw new Error("pickup.invalidResponse");
+  }
+  if (needsPickupReconciliation(order) || isLegacyPickupOrder(order) ||
+      isTerminalPickupOrder(order) || isPickupBlocked(order)) {
+    if (Object.values(order.actions).some((value) => value !== false)) {
+      throw new Error("pickup.invalidResponse");
+    }
+    return order;
   }
   const hasMutation = Object.values(order.actions).some((value) => value === true);
   const payAtCollection = order.paymentMode === "PAY_AT_COUNTER";

@@ -9,7 +9,8 @@ import { useStoreLocation } from "../../context/storeLocationContext";
 import { listPickupOrders, getPickupOrder } from "../../helpers/pickup_helper";
 import PickupOrderDetails from "./PickupOrderDetails";
 import PickupSchedule from "../customer/PickupSchedule";
-import { isPickupSummary, pickupErrorMessage, validatePickupOrder } from "./pickupUtils";
+import PickupLifecycleNotice from "../customer/PickupLifecycleNotice";
+import { isLegacyPickupOrder, isPickupSummary, matchesPickupQueueView, pickupErrorMessage, validatePickupOrder } from "./pickupUtils";
 
 export default function PickupOrders() {
   const { storeId } = useStoreLocation();
@@ -18,8 +19,9 @@ export default function PickupOrders() {
 
 function PickupQueue({ storeId }) {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState("");
+  const [queueView, setQueueView] = useState("ACTIVE");
   const [page, setPage] = useState(0);
   const [revision, setRevision] = useState(0);
   const [queueResult, setQueueResult] = useState(null);
@@ -27,7 +29,7 @@ function PickupQueue({ storeId }) {
   const [detailResult, setDetailResult] = useState(null);
   const [mutationBusy, setMutationBusy] = useState(false);
   const size = 20;
-  const queueKey = JSON.stringify({ storeId, filter, page, revision });
+  const queueKey = JSON.stringify({ storeId, queueView, filter, page, revision });
   const detailKey = JSON.stringify({ storeId, selectedId, revision });
   const queue = queueResult?.key === queueKey ? queueResult.data : null;
   const order = detailResult?.key === detailKey && selectedId ? detailResult.data : null;
@@ -39,12 +41,18 @@ function PickupQueue({ storeId }) {
   useEffect(() => {
     let active = true;
     if (!storeId) return () => { active = false; };
-    listPickupOrders({ storeId, preparationStatus: filter, page, size })
+    listPickupOrders({ storeId, queueView, preparationStatus: filter === "OVERDUE" ? "" : filter,
+      ...(filter === "OVERDUE" ? { pickupTimingStatus: "OVERDUE" } : {}), page, size })
       .then(({ data }) => {
         if (!Array.isArray(data?.items) || !Number.isInteger(data.total) ||
             data.total < 0 || data.page !== page || data.size !== size ||
-            !data.items.every((item) => isPickupSummary(item, storeId))) {
+            !data.items.every((item) => isPickupSummary(item, storeId) &&
+              (filter !== "OVERDUE" || (item.pickupTimingStatus === "OVERDUE" &&
+                item.paymentStatus === "SUCCESS")))) {
           throw new Error("pickup.invalidResponse");
+        }
+        if (!data.items.every((item) => matchesPickupQueueView(item, queueView))) {
+          throw new Error("pickup.queueViewUnsupported");
         }
         if (active) setQueueResult({ key: queueKey, data });
       })
@@ -52,7 +60,7 @@ function PickupQueue({ storeId }) {
         if (active) setQueueResult({ key: queueKey, error: pickupErrorMessage(requestError, t) });
       });
     return () => { active = false; };
-  }, [storeId, filter, page, revision, queueKey, t]);
+  }, [storeId, queueView, filter, page, revision, queueKey, t]);
 
   useEffect(() => {
     let active = true;
@@ -78,17 +86,37 @@ function PickupQueue({ storeId }) {
       <Typography color="text.secondary" sx={{ mb: 2 }}>{t("pickup.subtitle")}</Typography>
       {!storeId ? <Alert severity="warning">{t("pickup.storeRequired")}</Alert> : (
         <>
+          <Box role="group" aria-label={t("pickup.queueView")} sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
+            {["ACTIVE", "RECONCILIATION"].map((view) => (
+              <Button key={view} variant={queueView === view ? "contained" : "outlined"}
+                aria-pressed={queueView === view} disabled={mutationBusy}
+                sx={{ minHeight: 44 }}
+                onClick={() => {
+                  setQueueView(view);
+                  setFilter("");
+                  setPage(0);
+                  setSelectedId("");
+                  setSearchParams({}, { replace: true });
+                }}>{t(view === "ACTIVE" ? "pickup.activePickup" : "pickup.reconciliation")}</Button>
+            ))}
+          </Box>
+          {queueView === "RECONCILIATION" && (
+            <Alert severity="warning" sx={{ mb: 2 }}>{t("pickup.reconciliationHint")}</Alert>
+          )}
           <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
             <TextField
-              select size="small" label={t("pickup.filter")} value={filter} disabled={mutationBusy}
+              select size="small" label={t("pickup.filter")} value={filter}
+              disabled={mutationBusy || queueView === "RECONCILIATION"}
               onChange={(event) => {
                 setFilter(event.target.value);
                 setPage(0);
                 setSelectedId("");
+                setSearchParams({}, { replace: true });
               }}
               sx={{ minWidth: 180 }}
             >
               <MenuItem value="">{t("pickup.activeOrders")}</MenuItem>
+              <MenuItem value="OVERDUE">{t("pickup.overdueFilter")}</MenuItem>
               {["NOT_STARTED", "PREPARING", "READY"].map((status) => (
                 <MenuItem key={status} value={status}>{t(`pickup.status.${status}`)}</MenuItem>
               ))}
@@ -104,14 +132,26 @@ function PickupQueue({ storeId }) {
                 <CardContent>
                   <Typography fontWeight={700}>{item.transactionId}</Typography>
                   <PickupSchedule order={item} />
-                  <Typography>{t(`pickup.status.${item.preparationStatus}`)}</Typography>
+                  <PickupLifecycleNotice order={item} />
+                  <Typography>{t("pickup.transactionState")}: {item.state}</Typography>
+                  {queueView === "ACTIVE" && <Typography>{t(`pickup.status.${item.preparationStatus}`)}</Typography>}
                   <Typography>{t("pickup.payment")}: {item.paymentStatus}</Typography>
-                  {item.paymentMode === "PAY_AT_COUNTER" && (
+                  {isLegacyPickupOrder(item) && (
+                    <Alert severity="warning" sx={{ my: 1 }}>{t("pickup.legacyReadOnly")}</Alert>
+                  )}
+                  {!isLegacyPickupOrder(item) && queueView === "RECONCILIATION" &&
+                    item.state !== "EXPIRED" && (
+                      <Alert severity="warning" sx={{ my: 1 }}>
+                        {t("pickup.reconciliationReason.MISSING_PICKUP_SCHEDULE")}
+                      </Alert>
+                    )}
+                  {queueView === "ACTIVE" && item.paymentMode === "PAY_AT_COUNTER" && !isLegacyPickupOrder(item) && (
                     <Typography>{t(item.arrivalStatus === "ARRIVED" ? "pickup.arrived" : "pickup.awaitingArrival")}</Typography>
                   )}
                   <Typography>{item.currency} {item.amount}</Typography>
                   <Typography>{new Date(item.createdAt).toLocaleString()}</Typography>
                   <Button onClick={() => {
+                    setSearchParams({ transactionId: item.transactionId }, { replace: true });
                     setDetailResult(null);
                     setSelectedId(item.transactionId);
                     if (selectedId === item.transactionId) setRevision((value) => value + 1);
@@ -135,7 +175,10 @@ function PickupQueue({ storeId }) {
               key={`${order.transactionId}-${revision}`}
               order={order} onChanged={refresh}
               onBusyChange={setMutationBusy}
-              onClose={() => setSelectedId("")}
+              onClose={() => {
+                setSelectedId("");
+                setSearchParams({}, { replace: true });
+              }}
             />
           )}
         </>

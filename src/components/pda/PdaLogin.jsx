@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import PropTypes from "prop-types";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,11 +10,18 @@ import {
   Typography,
 } from "@mui/material";
 import { request, setAuthHeader } from "../../helpers/axios_helper";
+import { clearSessionCredentials } from "../../helpers/session_helper";
 
 export default function PdaLogin() {
+  const [searchParams] = useSearchParams();
+  const loginKey = searchParams.get("loginkey") || "";
+  return <PdaLoginAttempt key={loginKey} loginKey={loginKey} />;
+}
+
+function PdaLoginAttempt({ loginKey }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const exchange = useRef(null);
   const [error, setError] = useState("");
   const [expiredLinkError, setExpiredLinkError] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -54,29 +62,14 @@ export default function PdaLogin() {
     };
   };
 
-  const clearAccessibleCookies = () => {
-    if (typeof document === "undefined") return;
-    const raw = document.cookie;
-    if (!raw) return;
-    raw.split(";").forEach((part) => {
-      const name = part.split("=")[0]?.trim();
-      if (!name) return;
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/pda`;
-    });
-  };
-
   const handleDismissExpired = async () => {
     setDismissing(true);
-    setAuthHeader(null);
-    localStorage.removeItem("pda_user_info");
-    localStorage.removeItem("user_info");
-    clearAccessibleCookies();
+    clearSessionCredentials("PDA");
 
     await Promise.allSettled([
-      request("POST", "/auth/logout", null, { skipAuthRedirect: true }),
       request("POST", "/api/mobile-logins/logout", null, {
         skipAuthRedirect: true,
+        sessionInterface: "PDA",
       }),
     ]);
 
@@ -88,44 +81,34 @@ export default function PdaLogin() {
   };
 
   useEffect(() => {
-    console.log("[PdaLogin] Component mounted");
-    const loginkey = searchParams.get("loginkey");
-    console.log("[PdaLogin] loginkey from query params:", loginkey);
-
-    if (!loginkey) {
-      console.warn("[PdaLogin] No loginkey found in URL — halting");
-      setError(t("pda.login.missingKey"));
-      return;
+    if (!loginKey) return;
+    let active = true;
+    // QR challenges are one-use; effect replays must subscribe to the same exchange.
+    if (!exchange.current) {
+      exchange.current = request("POST", "/api/mobile-logins/login", { loginKey }, {
+        skipAuthRedirect: true, skipBackendErrorDialog: true, sessionInterface: "PDA",
+      });
     }
-
-    console.log(
-      "[PdaLogin] Submitting login request to /api/mobile-logins/login",
-    );
-    request("POST", "/api/mobile-logins/login", { loginKey: loginkey })
+    exchange.current
       .then((response) => {
-        console.log("[PdaLogin] Login response received:", response.data);
+        if (!active) return;
         const token = response.data.token;
-        console.log("[PdaLogin] Token present:", !!token);
-        setAuthHeader(token);
+        setAuthHeader(token, "PDA");
         const userData = response.data;
         localStorage.setItem("pda_user_info", JSON.stringify(userData));
-        console.log(
-          "[PdaLogin] User info saved to localStorage, navigating to /pda/menu",
-        );
         navigate("/pda/home", { replace: true });
       })
       .catch((err) => {
-        console.error("[PdaLogin] Login failed:", err);
-        console.error("[PdaLogin] Response data:", err?.response?.data);
+        if (!active) return;
         const { message, isExpired } = resolveLoginError(err);
         setExpiredLinkError(isExpired);
         const msg = message;
-        console.error("[PdaLogin] Displaying error to user:", msg);
         setError(msg);
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { active = false; };
+  }, [navigate, loginKey, t]);
 
-  if (error) {
+  if (error || !loginKey) {
     return (
       <Box
         sx={{
@@ -138,8 +121,13 @@ export default function PdaLogin() {
         }}
       >
         <Alert severity="error" sx={{ maxWidth: 480, width: "100%" }}>
-          <Typography variant="body1">{error}</Typography>
+          <Typography variant="body1">{error || t("pda.login.signInAgain")}</Typography>
         </Alert>
+        {!loginKey && (
+          <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate("/login", { replace: true })}>
+            {t("pda.login.openLogin")}
+          </Button>
+        )}
         {expiredLinkError && (
           <Button
             variant="contained"
@@ -169,3 +157,5 @@ export default function PdaLogin() {
     </Box>
   );
 }
+
+PdaLoginAttempt.propTypes = { loginKey: PropTypes.string.isRequired };

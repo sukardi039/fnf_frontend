@@ -47,8 +47,7 @@ export const getPickupSlots = (now, timeZone, businessHours) => {
   for (let instant = first; instant <= earliest + 26 * 60 * 60 * 1000; instant += 30 * 60 * 1000) {
     const start = new Date(instant);
     const local = partsAt(start, timeZone);
-    if (local.year !== today.year || local.month !== today.month || local.day !== today.day ||
-        local.minute % 30 !== 0) continue;
+    if (local.minute % 30 !== 0) continue;
     if (!intervals.some((period) => instant >= period.start &&
         instant + 60 * 60 * 1000 <= period.end)) continue;
     slots.push({
@@ -75,4 +74,9 @@ export const formatPickupTime = (value, timeZone, relativeTo) => {
 export const formatPickupSlot = (slot) =>
   `${formatPickupTime(slot.pickupSlotStart, slot.pickupTimezone)} - ${
     formatPickupTime(slot.pickupSlotEnd, slot.pickupTimezone, slot.pickupSlotStart)}`;
+
+export const formatPickupSlotWithDate = (slot) =>
+  `${new Intl.DateTimeFormat(undefined, {
+    timeZone: slot.pickupTimezone, month: "short", day: "numeric",
+  }).format(new Date(slot.pickupSlotStart))} ${formatPickupSlot(slot)}`;
 import { timeMinutes, validateBusinessHours, WEEKDAYS } from "./store_hours_helper";

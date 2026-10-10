@@ -4,14 +4,32 @@ import {
   listPickupOrders, getPickupOrder, allocatePickupLots, preparePickupOrder,
   verifyPickupCollection, handoverPickupOrder, issueCustomerCollectionToken,
   recordPickupArrival, confirmPickupCash, issueCustomerArrivalToken,
+  reconcilePickupOrder,
 } from "./pickup_helper";
 
 vi.mock("./axios_helper", () => ({ request: vi.fn() }));
 
 describe("pickup API helpers", () => {
   beforeEach(() => vi.clearAllMocks());
+  it("records scoped reconciliation with an explicit outcome/note and stable command key", () => {
+    reconcilePickupOrder("TX/1", "Store 1", { outcome: "CLOSE_UNPAID", note: "Checked" }, "KEY-R");
+    expect(request).toHaveBeenCalledWith("POST",
+      "/api/pickup-orders/TX%2F1/reconciliation?storeId=Store+1",
+      { outcome: "CLOSE_UNPAID", note: "Checked" },
+      { skipBackendErrorDialog: true, headers: { "Idempotency-Key": "KEY-R" } });
+  });
 
   it("sends scoped server-side filters and pagination", () => {
+    listPickupOrders({ storeId: "STORE-1", queueView: "RECONCILIATION", page: 1 });
+    expect(request).toHaveBeenLastCalledWith(
+      "GET", "/api/pickup-orders?storeId=STORE-1&page=1&size=20&queueView=RECONCILIATION",
+      null, { skipBackendErrorDialog: true },
+    );
+    listPickupOrders({ storeId: "STORE-1", pickupTimingStatus: "OVERDUE" });
+    expect(request).toHaveBeenLastCalledWith(
+      "GET", "/api/pickup-orders?storeId=STORE-1&page=0&size=20&pickupTimingStatus=OVERDUE",
+      null, { skipBackendErrorDialog: true },
+    );
     listPickupOrders({ storeId: "Store 1", preparationStatus: "READY", page: 2, size: 20 });
     expect(request).toHaveBeenCalledWith(
       "GET", "/api/pickup-orders?storeId=Store+1&page=2&size=20&preparationStatus=READY",

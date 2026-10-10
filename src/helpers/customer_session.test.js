@@ -5,7 +5,9 @@ import { listCustomerTransactions } from "./customer_cart_helper";
 
 describe("customer and system session isolation", () => {
   let adapter;
+  const onExpired = (event) => { event.detail.handled = true; };
   beforeEach(() => {
+    window.addEventListener("auth:expired", onExpired);
     localStorage.clear();
     sessionStorage.clear();
     localStorage.setItem("auth_token", "system-session");
@@ -16,6 +18,7 @@ describe("customer and system session isolation", () => {
     }));
   });
   afterEach(() => {
+    window.removeEventListener("auth:expired", onExpired);
     api.defaults.adapter = adapter;
     localStorage.clear();
     sessionStorage.clear();

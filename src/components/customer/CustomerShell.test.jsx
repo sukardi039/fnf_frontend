@@ -1,11 +1,12 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CustomerShell from "./CustomerShell";
 import { countIncompleteCustomerOrders } from "../../helpers/customer_cart_helper";
+import { clearCustomerSession } from "../../helpers/customer_helper";
 
 vi.mock("../../helpers/customer_cart_helper", () => ({
   countIncompleteCustomerOrders: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock("../../helpers/customer_helper", () => ({
   clearCustomerSession: vi.fn(),
 }));
 vi.mock("../common/StoreScope", () => ({ default: StoreScopeMock }));
-vi.mock("./CustomerAuth", () => ({ default: () => null }));
+vi.mock("./CustomerAuth", () => ({ default: () => <div>Customer login</div> }));
 vi.mock("./CustomerOrders", () => ({ default: () => null }));
 vi.mock("./CustomerBrowse", () => ({ default: BrowseMock }));
 vi.mock("./CustomerCart", () => ({ default: CartMock }));
@@ -43,6 +44,7 @@ function BrowseMock({ onAddToCart }) {
     <>
       <button onClick={() => onAddToCart({
         skuId: "APPLE", productName: "Apple", uom: "EA", quantity: 3,
+        productPicture: "https://images.example/apple.jpg",
       })}>
         Add apple
       </button>
@@ -87,7 +89,29 @@ function cartBadge() {
 }
 
 describe("Customer mobile cart badge", () => {
+  it("offers logout on the profile page and returns to customer login", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole("button", { name: "Profile" }));
+    const profile = within(screen.getByRole("main"));
+    expect(profile.getByText("customer@example.com")).toBeInTheDocument();
+    await user.click(profile.getByRole("button", { name: "Logout" }));
+    expect(clearCustomerSession).toHaveBeenCalledOnce();
+    expect(screen.getByText("Customer login")).toBeInTheDocument();
+    expect(screen.queryByText("customer@example.com")).not.toBeInTheDocument();
+  });
+  it("clears the displayed customer session and shows login immediately on mobile expiry", async () => {
+    window.history.replaceState({}, "", "/m/browse");
+    renderShell();
+    await screen.findByRole("button", { name: "Add apple" });
+    act(() => window.dispatchEvent(new CustomEvent("auth:expired", {
+      detail: { interface: "MOBILE", loginPath: "/m/auth", handled: false },
+    })));
+    expect(screen.getByText("Customer login")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add apple" })).not.toBeInTheDocument();
+  });
   beforeEach(() => {
+    clearCustomerSession.mockClear();
     sessionStorage.clear();
     countIncompleteCustomerOrders.mockReset();
     countIncompleteCustomerOrders.mockResolvedValue(0);
@@ -95,6 +119,7 @@ describe("Customer mobile cart badge", () => {
   afterEach(() => {
     cleanup();
     sessionStorage.clear();
+    window.history.replaceState({}, "", "/");
   });
 
   it("counts distinct lines, not quantities, and updates on removal", async () => {
@@ -105,6 +130,8 @@ describe("Customer mobile cart badge", () => {
 
     await user.click(screen.getByRole("button", { name: "Add apple" }));
     expect(cartBadge().getByText("1")).toBeVisible();
+    expect(JSON.parse(sessionStorage.getItem("customer_cart"))[0].productPicture)
+      .toBe("https://images.example/apple.jpg");
     await user.click(screen.getByRole("button", { name: "Add apple" }));
     expect(cartBadge().getByText("1")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Add orange" }));

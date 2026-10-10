@@ -85,6 +85,7 @@ describe("ProductCatalog photo search", () => {
     expect(onAddToCart).toHaveBeenCalledWith({
       skuId: "SKU-APPLE",
       productName: "Fuji Apple",
+      productPicture: "https://images.example/apple.jpg",
       uom: "EA",
       quantity: 2,
     });

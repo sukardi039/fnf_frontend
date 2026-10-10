@@ -1,7 +1,15 @@
 import axios from "axios";
+import {
+  currentSessionInterface, expireSession, isBackendSessionExpiry,
+  sessionGeneration, sessionInterfaceFor,
+} from "./session_helper";
 
 // Simple token storage helpers (persisted in localStorage)
-export const getAuthToken = () => {
+export const getAuthToken = (surface = currentSessionInterface()) => {
+  if (surface === "PDA") {
+    return window.sessionStorage.getItem("pda_auth_token") ||
+      window.localStorage.getItem("pda_auth_token") || null;
+  }
   // Prefer sessionStorage over localStorage for access tokens as we migrate
   // toward secure HttpOnly cookies. sessionStorage is cleared when the tab closes.
   try {
@@ -46,41 +54,22 @@ export const setCustomerAuthToken = (token) => {
   }
 };
 
-const isPdaRefreshEnabled = () =>
-  String(import.meta.env.VITE_PDA_USE_REFRESH || "false").toLowerCase() ===
-  "true";
-
-const redirectToLogin = () => {
-  if (isPdaPath()) {
-    window.dispatchEvent(new CustomEvent("pda:auth:expired"));
-  } else {
-    try {
-      window.dispatchEvent(new CustomEvent("auth:expired", { detail: {} }));
-    } catch (e) {
-      /* ignore */
-    }
-    const isCustomerPath =
-      typeof window !== "undefined" &&
-      window.location.pathname.startsWith("/m/");
-    window.location.href = isCustomerPath ? "/m/auth" : "/login";
-  }
-};
-
-export const setAuthHeader = (token) => {
+export const setAuthHeader = (token, surface = currentSessionInterface()) => {
+  const storageKey = surface === "PDA" ? "pda_auth_token" : "auth_token";
   if (token !== null && token !== undefined) {
     try {
-      window.sessionStorage.setItem("auth_token", token);
+      window.sessionStorage.setItem(storageKey, token);
     } catch {
       // ignore
     }
-    window.localStorage.setItem("auth_token", token);
+    window.localStorage.setItem(storageKey, token);
   } else {
     try {
-      window.sessionStorage.removeItem("auth_token");
+      window.sessionStorage.removeItem(storageKey);
     } catch {
       // ignore
     }
-    window.localStorage.removeItem("auth_token");
+    window.localStorage.removeItem(storageKey);
   }
 };
 
@@ -126,7 +115,7 @@ export const isTokenExpired = (token) => {
     const payload = JSON.parse(atob(token.split(".")[1]));
     const currentTime = Date.now() / 1000;
     return payload.exp < currentTime;
-  } catch (err) {
+  } catch {
     return true;
   }
 };
@@ -206,46 +195,51 @@ export const api = axios.create({
   withCredentials: true, // allow sending cookies for refresh token flows
 });
 
-// Refresh flow state
-let isRefreshing = false;
-let refreshQueue = [];
-
-const processQueue = (error, token = null) => {
-  refreshQueue.forEach((prom) => {
-    if (error) prom.reject(error);
-    else prom.resolve(token);
-  });
-  refreshQueue = [];
-};
-
 // Request interceptor: attach access token if present
 api.interceptors.request.use(
   (config) => {
     config.authScope = isCustomerRequest(config) ? "customer" : "system";
+    config.sessionInterface = sessionInterfaceFor(config);
+    config.sessionGeneration = sessionGeneration(config.sessionInterface);
+    config.headers["X-Session-Interface"] = config.url === "/api/mobile-logins/request"
+      ? config.loginChallengeInterface || config.sessionInterface
+      : config.sessionInterface;
     const token = config.authScope === "customer"
       ? window.sessionStorage.getItem("customer_auth_token")
-      : getAuthToken();
-    if (config.authScope === "customer") delete config.headers.Authorization;
+      : getAuthToken(config.sessionInterface);
+    delete config.headers.Authorization;
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error),
 );
 
-// Response interceptor: handle 401 by attempting refresh
+// Session expiry is terminal; never refresh or replay the rejected request.
 api.interceptors.response.use(
   (response) => {
+    if (response.config.sessionGeneration !== sessionGeneration(response.config.sessionInterface)) {
+      return Promise.reject(Object.assign(new Error("Session ended before response arrived"), {
+        config: response.config, sessionEnded: true,
+      }));
+    }
     const responseToken = extractTokenFromResponse(response);
     // Prefer cookies; only use body tokens as a transitional fallback.
     if (responseToken) {
       if (isCustomerRequest(response.config)) setCustomerAuthToken(responseToken);
-      else setAuthHeader(responseToken);
+      else setAuthHeader(responseToken, response.config.sessionInterface);
     }
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
+    if (originalRequest.sessionGeneration !== sessionGeneration(originalRequest.sessionInterface)) {
+      return Promise.reject(error);
+    }
+    if (isBackendSessionExpiry(error)) {
+      expireSession(originalRequest.sessionInterface);
+      return Promise.reject(error);
+    }
 
     // Show blocking error prompt (if available in the app) and wait.
     // Skipped for PDA and TV paths — those surfaces handle backend failures locally.
@@ -265,7 +259,7 @@ api.interceptors.response.use(
           // Fallback: wait for the timeout
           await new Promise((res) => setTimeout(res, timeoutMs));
         }
-      } catch (e) {
+      } catch {
         // ignore any errors from the UI handshake
       }
     };
@@ -275,109 +269,10 @@ api.interceptors.response.use(
     // Fire and wait for UI acknowledgement before proceeding with recovery
     await tryShowBlockingError(backendMessage);
 
-    if (error.response?.status === 401 && isCustomerRequest(originalRequest)) {
-      setCustomerAuthToken(null);
-      window.localStorage.removeItem("customer_info");
-      if (!originalRequest.skipAuthRedirect) window.location.href = "/m/auth";
-      return Promise.reject(error);
-    }
-
-    // PDA default behavior: no refresh cycle unless explicitly enabled.
-    // When enabled, PDA follows the same refresh flow as web users.
-    if (
-      error.response?.status === 401 &&
-      isPdaPath() &&
-      !originalRequest.skipAuthRedirect &&
-      !isPdaRefreshEnabled()
-    ) {
-      setAuthHeader(null);
-      window.dispatchEvent(new CustomEvent("pda:auth:expired"));
-      return Promise.reject(error);
-    }
-
-    // Some endpoints use 401 for business validation (e.g. invalid admin password).
-    // Allow callers to opt out of global auth refresh/redirect handling.
-    if (
-      error.response &&
-      error.response.status === 401 &&
-      originalRequest.skipAuthRedirect
-    ) {
-      return Promise.reject(error);
-    }
-
-    // If we already tried a retry, avoid infinite loops
-    if (
-      error.response &&
-      error.response.status === 401 &&
-      !originalRequest._retry
-    ) {
-      originalRequest._retry = true;
-
-      // If a refresh is already running, queue this request
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          refreshQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      isRefreshing = true;
-      try {
-        // Try refresh endpoint (server should use HttpOnly refresh cookie)
-        const refreshRes = await axios.post(
-          `${API_BASE_URL}/api/auth/session/refresh`,
-          null,
-          { withCredentials: true },
-        );
-        const newToken = refreshRes.data && refreshRes.data.accessToken;
-        if (newToken) {
-          setAuthHeader(newToken);
-          processQueue(null, newToken);
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          return api(originalRequest);
-        }
-        // No new token returned — force logout
-        processQueue(new Error("No token"), null);
-        setAuthHeader(null);
-        redirectToLogin();
-        return Promise.reject(error);
-      } catch (refreshErr) {
-        processQueue(refreshErr, null);
-        setAuthHeader(null);
-        // UX: inform user and redirect to login
-        redirectToLogin();
-        return Promise.reject(refreshErr);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
     return Promise.reject(error);
   },
 );
 
 // Backwards-compatible request helper used across the app
-export const request = (method, url, data, config = {}) => {
-  return api({ method, url, data, ...config }).catch((error) => {
-    if (config.skipAuthRedirect || error?.config?.skipAuthRedirect) {
-      throw error;
-    }
-
-    // If 401 not handled by interceptor, clear token and redirect
-    if (error.response && error.response.status === 401) {
-      if (isCustomerRequest(error.config || config)) {
-        setCustomerAuthToken(null);
-        window.localStorage.removeItem("customer_info");
-        window.location.href = "/m/auth";
-        throw error;
-      }
-      setAuthHeader(null);
-      redirectToLogin();
-    }
-    throw error;
-  });
-};
+export const request = (method, url, data, config = {}) =>
+  api({ method, url, data, ...config });

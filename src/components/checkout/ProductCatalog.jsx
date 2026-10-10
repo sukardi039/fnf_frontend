@@ -14,7 +14,6 @@ import {
 } from "@mui/material";
 import {
   Add as AddIcon,
-  Inventory2 as InventoryIcon,
   PhotoCamera as PhotoCameraIcon,
   Undo as UndoIcon,
 } from "@mui/icons-material";
@@ -24,81 +23,7 @@ import {
   matchProductsByImage,
 } from "../catalog/productApi";
 import { EmptyState, LoadingState } from "../common";
-import { getDisplayImageInfo, ThumbnailImg } from "../../helpers/file_helper";
-
-function ProductPicture({ picture, alt }) {
-  const imageInfo = picture ? getDisplayImageInfo(picture) : null;
-  let imageUrl = imageInfo?.imageUrl || null;
-  if (!imageUrl && typeof picture === "string") {
-    const value = picture.trim();
-    if (value.startsWith("data:")) imageUrl = value;
-    else if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 100) {
-      imageUrl = `data:image/png;base64,${value}`;
-    }
-  }
-  const imageMeta = imageInfo?.meta;
-
-  return (
-    <Box
-      sx={{
-        position: "relative",
-        width: "auto",
-        height: "auto",
-        minWidth: 0,
-        minHeight: 0,
-        m: 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        bgcolor: "background.default",
-        color: "text.secondary",
-        borderRadius: 1,
-      }}
-    >
-      <InventoryIcon sx={{ fontSize: 28 }} />
-      {imageMeta?.id ? (
-        <Box sx={{ position: "absolute", inset: 0 }}>
-          <ThumbnailImg
-            fileId={imageMeta.id}
-            viewUrl={imageMeta.viewUrl || ""}
-            provider={imageMeta.provider || null}
-            width={240}
-            height={180}
-            alt={alt}
-            style={{ width: "100%", height: "100%", objectFit: "contain" }}
-          />
-        </Box>
-      ) : imageUrl ? (
-        <Box
-          component="img"
-          src={imageUrl}
-          alt={alt}
-          referrerPolicy="no-referrer"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-          sx={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-          }}
-        />
-      ) : null}
-    </Box>
-  );
-}
-
-ProductPicture.propTypes = {
-  picture: PropTypes.oneOfType([
-    PropTypes.string,
-    PropTypes.object,
-    PropTypes.array,
-  ]),
-  alt: PropTypes.string,
-};
+import ProductThumbnail from "../common/ProductThumbnail";
 
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
 const SUPPORTED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -242,6 +167,7 @@ export default function ProductCatalog({
     onAddToCart?.({
       skuId: product.skuId,
       productName: product.productName,
+      productPicture: product.productPicture,
       uom: product.uom,
       quantity,
     });
@@ -396,9 +322,10 @@ export default function ProductCatalog({
                     </Button>
                   </CardActions>
                 </Box>
-                <ProductPicture
+                <ProductThumbnail
                   picture={product.productPicture}
                   alt={product.productName || ""}
+                  width="auto" height="auto" sx={{ m: 1 }}
                 />
               </Card>
             </Box>

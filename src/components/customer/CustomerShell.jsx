@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import PropTypes from "prop-types";
 import {
   Routes,
   Route,
@@ -38,6 +39,7 @@ import {
   getCustomerInfo,
 } from "../../helpers/customer_helper";
 import { countIncompleteCustomerOrders } from "../../helpers/customer_cart_helper";
+import { currentSessionInterface } from "../../helpers/session_helper";
 
 function CustomerComingSoon() {
   const { t } = useTranslation();
@@ -78,7 +80,8 @@ function useCartState() {
       if (existing) {
         return current.map((i) =>
           i.skuId === item.skuId
-            ? { ...i, quantity: Number(i.quantity) + Number(item.quantity) }
+            ? { ...i, productPicture: item.productPicture ?? i.productPicture,
+              quantity: Number(i.quantity) + Number(item.quantity) }
             : i,
         );
       }
@@ -106,7 +109,7 @@ function useCartState() {
   return { items, addItem, removeItem, updateQuantity, clearCart };
 }
 
-function CustomerProfile() {
+function CustomerProfile({ onLogout }) {
   const { t } = useTranslation();
   const customer = getCustomerInfo();
   return (
@@ -120,6 +123,10 @@ function CustomerProfile() {
           <Typography variant="body2" color="text.secondary">
             {customer.email}
           </Typography>
+          <Button variant="contained" color="error" onClick={onLogout}
+            sx={{ mt: 3, minHeight: 44 }}>
+            {t("customerAuth.logout", "Logout")}
+          </Button>
         </>
       ) : (
         <Typography variant="body2" color="text.secondary">
@@ -129,6 +136,8 @@ function CustomerProfile() {
     </Box>
   );
 }
+
+CustomerProfile.propTypes = { onLogout: PropTypes.func.isRequired };
 
 export default function CustomerShell() {
   const { t } = useTranslation();
@@ -141,6 +150,22 @@ export default function CustomerShell() {
   const [orderCountError, setOrderCountError] = useState(false);
   const { items, addItem, removeItem, updateQuantity, clearCart } =
     useCartState();
+
+  React.useEffect(() => {
+    const onExpired = (event) => {
+      if (event.detail.interface !== "MOBILE") return;
+      setCustomer(null);
+      setOrderCount(null);
+      setOrderCountError(false);
+      setAuthError(t("auth.sessionExpired"));
+      if (currentSessionInterface() === "MOBILE") {
+        event.detail.handled = true;
+        navigate("/m/auth", { replace: true });
+      }
+    };
+    window.addEventListener("auth:expired", onExpired);
+    return () => window.removeEventListener("auth:expired", onExpired);
+  }, [navigate, t]);
 
   React.useEffect(() => {
     let active = true;
@@ -239,7 +264,8 @@ export default function CustomerShell() {
 
   return (
     <Box sx={{ pb: 8, minHeight: "100vh" }}>
-      <AppBar position="static" color="primary" elevation={1}>
+      <AppBar position="static" color="default" elevation={0}
+        sx={{ bgcolor: "background.paper", color: "text.primary", borderRadius: 0 }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             {t("app.title", "Fresh And Fresh")}
@@ -292,7 +318,7 @@ export default function CustomerShell() {
             }
           />
           <Route path="/orders" element={<CustomerOrders />} />
-          <Route path="/profile" element={<CustomerProfile />} />
+          <Route path="/profile" element={<CustomerProfile onLogout={handleLogout} />} />
           <Route path="/" element={<Navigate to="/m/browse" replace />} />
           <Route path="/*" element={<CustomerComingSoon />} />
         </Routes>

@@ -11,7 +11,6 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  QrCodeScanner as ScanIcon,
   Person as MeIcon,
   ShoppingCart as CheckoutIcon,
   LocalShipping as PickupIcon,
@@ -23,11 +22,11 @@ export default function PdaLayout() {
   const navigate = useNavigate();
 
   const tabValue = location.pathname.startsWith("/pda/me")
-    ? 3
+    ? 2
     : location.pathname.startsWith("/pda/checkout")
       ? 1
       : location.pathname.startsWith("/pda/pickup")
-        ? 2
+        ? 0
       : 0;
 
   return (
@@ -35,7 +34,7 @@ export default function PdaLayout() {
       <AppBar position="static" color="primary" elevation={1}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
-            {t("pda.handover.title", "PDA")}
+            {t("pickup.title")}
           </Typography>
         </Toolbar>
       </AppBar>
@@ -53,27 +52,21 @@ export default function PdaLayout() {
           value={tabValue}
           onChange={(event, newValue) => {
             if (newValue === 0) {
-              navigate("/pda/home", { replace: true });
+              navigate("/pda/pickup", { replace: true });
             } else if (newValue === 1) {
               navigate("/pda/checkout", { replace: true });
             } else if (newValue === 2) {
-              navigate("/pda/pickup", { replace: true });
-            } else if (newValue === 3) {
               navigate("/pda/me", { replace: true });
             }
           }}
         >
           <BottomNavigationAction
-            label={t("pda.nav.verifyCollection", "Verify")}
-            icon={<ScanIcon />}
+            label={t("pickup.nav")}
+            icon={<PickupIcon />}
           />
           <BottomNavigationAction
             label={t("pda.nav.assistedCheckout", "Checkout")}
             icon={<CheckoutIcon />}
-          />
-          <BottomNavigationAction
-            label={t("pickup.nav")}
-            icon={<PickupIcon />}
           />
           <BottomNavigationAction
             label={t("pda.nav.logout", "Me")}

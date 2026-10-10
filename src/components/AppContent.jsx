@@ -157,7 +157,7 @@ export default function AppContent() {
     request("POST", "/login", {
       login: username,
       password: password,
-    })
+    }, { skipAuthRedirect: true, skipBackendErrorDialog: true, sessionInterface: "WEB" })
       .then((response) => {
         setAuthHeader(response.data.token);
         const userData = response.data;
@@ -190,7 +190,7 @@ export default function AppContent() {
       login: username,
       password: password,
       active: 1,
-    })
+    }, { skipAuthRedirect: true, skipBackendErrorDialog: true, sessionInterface: "WEB" })
       .then((response) => {
         setAuthHeader(response.data.token);
         const userData = response.data;
@@ -215,7 +215,9 @@ export default function AppContent() {
     e.preventDefault();
     setLoginError("");
     setLoginLoading(true);
-    request("POST", "/api/mobile-logins/verify", { otp })
+    request("POST", "/api/mobile-logins/verify", { otp }, {
+      skipAuthRedirect: true, skipBackendErrorDialog: true, sessionInterface: "WEB",
+    })
       .then((response) => {
         setAuthHeader(response.data.token);
         const userData = response.data;

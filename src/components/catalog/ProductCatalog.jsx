@@ -13,10 +13,7 @@ import {
   Edit as EditIcon,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import {
-  getDisplayImageInfo,
-  ThumbnailImg,
-} from "../../helpers/file_helper";
+import ProductThumbnail from "../common/ProductThumbnail";
 import { fetchProductFormats, listProducts } from "./productApi";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
 import {
@@ -160,53 +157,9 @@ const ProductCatalog = () => {
       headerAlign: "center",
       sortable: false,
       filterable: false,
-      renderCell: (params) => {
-        const imageInfo = params.value
-          ? getDisplayImageInfo(params.value)
-          : null;
-        const meta = imageInfo?.meta;
-        return (
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {meta?.id ? (
-              <ThumbnailImg
-                fileId={meta.id}
-                viewUrl={meta.viewUrl || ""}
-                provider={meta.provider || null}
-                width={40}
-                height={40}
-                alt={params.row.productName}
-                style={{ borderRadius: 4 }}
-              />
-            ) : imageInfo?.imageUrl ? (
-              <img
-                src={imageInfo.imageUrl}
-                alt={params.row.productName}
-                style={{
-                  width: 40,
-                  height: 40,
-                  objectFit: "cover",
-                  borderRadius: 4,
-                }}
-                onError={(event) => {
-                  event.target.style.display = "none";
-                }}
-              />
-            ) : (
-              <InventoryIcon
-                sx={{ color: "text.secondary", fontSize: "1.1rem" }}
-              />
-            )}
-          </Box>
-        );
-      },
+      renderCell: (params) => (
+        <ProductThumbnail picture={params.value} alt={params.row.productName} width={40} height={40} fit="cover" />
+      ),
     },
     {
       field: "productName",
@@ -369,15 +322,10 @@ const ProductCatalog = () => {
               columnDefs={blockColumnDefs}
               item={product}
               leadingMedia={{
-                field: "productPicture",
-                placeholder: (
-                  <InventoryIcon
-                    sx={{ color: "text.secondary", fontSize: "1.1rem" }}
-                  />
+                content: (
+                  <ProductThumbnail picture={product.productPicture} alt={product.productName}
+                    width={40} height={40} fit="cover" />
                 ),
-                altFields: ["productName"],
-                width: 40,
-                height: 40,
               }}
               enableActions={false}
               t={t}

@@ -68,12 +68,22 @@ describe("same-day pickup slots in the store timezone", () => {
     expect(slots.at(-1).pickupExpiresAt).toBe("2026-10-08T19:00:00.000Z");
   });
 
-  it("allows today's late slot to finish after midnight while the store remains open", () => {
+  it("allows after-midnight starts within today's overnight opening interval", () => {
     const businessHours = { ...emptyBusinessHours(), FRIDAY: [{ opensAt: "20:00", closesAt: "03:00" }] };
     const slots = getPickupSlots(new Date("2026-10-09T12:00:00Z"), "Asia/Singapore", businessHours);
-    expect(formatPickupSlot(slots.at(-1))).toBe("23:30 - 00:00 (2026-10-10)");
-    expect(slots.at(-1).pickupExpiresAt).toBe("2026-10-09T16:30:00.000Z");
-    expect(slots.every((slot) => Date.parse(slot.pickupSlotStart) < Date.parse("2026-10-09T16:00:00Z"))).toBe(true);
+    expect(formatPickupSlot(slots.at(-1))).toBe("02:00 - 02:30");
+    expect(slots.at(-1).pickupExpiresAt).toBe("2026-10-09T19:00:00.000Z");
+  });
+
+  it("offers midnight slots at 22:12 for Friday hours ending Saturday at 01:30", () => {
+    const businessHours = { ...emptyBusinessHours(),
+      FRIDAY: [{ opensAt: "07:30", closesAt: "01:30" }],
+      SATURDAY: [{ opensAt: "08:30", closesAt: "22:30" }],
+    };
+    const slots = getPickupSlots(new Date("2026-10-09T14:12:05Z"), "Asia/Singapore", businessHours);
+    expect(slots.map(formatPickupSlot)).toEqual(["00:00 - 00:30", "00:30 - 01:00"]);
+    expect(slots.at(-1).pickupExpiresAt).toBe("2026-10-09T17:30:00.000Z");
+    expect(getPickupSlots(new Date("2026-10-09T15:00:00.001Z"), "Asia/Singapore", businessHours)).toEqual([]);
   });
 
   it("handles a store timezone with a quarter-hour offset", () => {

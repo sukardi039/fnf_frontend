@@ -42,6 +42,7 @@ const BlockListItem = ({
 
   const renderLeadingMedia = () => {
     if (!leadingMedia) return null;
+    if (leadingMedia.content) return leadingMedia.content;
 
     const {
       field,
@@ -276,6 +277,7 @@ BlockListItem.propTypes = {
   t: PropTypes.func,
   enableActions: PropTypes.bool,
   leadingMedia: PropTypes.shape({
+    content: PropTypes.node,
     field: PropTypes.string,
     altFields: PropTypes.oneOfType([
       PropTypes.arrayOf(PropTypes.string),

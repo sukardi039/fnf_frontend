@@ -169,6 +169,7 @@ const WASimulator = () => {
         {
           skipAuthRedirect: true,
           skipBackendErrorDialog: true,
+          loginChallengeInterface: normalizedMessage === "otp" ? "WEB" : "PDA",
         },
       );
       const loginKey = response.data.loginKey || response.data.loginkey;

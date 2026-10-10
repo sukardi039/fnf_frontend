@@ -45,7 +45,8 @@ const StaffCheckout = ({ pdaMode = false }) => {
       if (existing) {
         return current.map((entry) =>
           entry.skuId === item.skuId
-            ? { ...entry, quantity: Number(entry.quantity) + item.quantity }
+            ? { ...entry, productPicture: item.productPicture ?? entry.productPicture,
+              quantity: Number(entry.quantity) + item.quantity }
             : entry,
         );
       }

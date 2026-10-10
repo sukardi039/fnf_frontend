@@ -18,7 +18,8 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { setAuthHeader } from "../../helpers/axios_helper";
+import { request } from "../../helpers/axios_helper";
+import { clearSessionCredentials } from "../../helpers/session_helper";
 
 export default function PdaMe() {
   const { t } = useTranslation();
@@ -40,17 +41,14 @@ export default function PdaMe() {
   const handleLogout = async () => {
     setError("");
     try {
-      await fetch("/api/mobile-logins/logout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await request("POST", "/api/mobile-logins/logout", null, {
+        skipAuthRedirect: true, skipBackendErrorDialog: true, sessionInterface: "PDA",
       });
-    } catch {
-      // best-effort logout
+    } catch (logoutError) {
+      console.error("PDA server logout failed", logoutError);
     } finally {
-      setAuthHeader(null);
-      localStorage.removeItem("pda_user_info");
-      localStorage.removeItem("user_info");
-      navigate("/pda/login", { replace: true });
+      clearSessionCredentials("PDA");
+      navigate("/login", { replace: true });
     }
   };
 

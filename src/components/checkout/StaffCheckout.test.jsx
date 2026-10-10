@@ -10,7 +10,7 @@ import { request } from "../../helpers/axios_helper";
 import { fetchActiveProducts } from "../catalog/productApi";
 
 vi.mock("../../helpers/axios_helper", () => ({ request: vi.fn() }));
-vi.mock("../catalog/productApi", () => ({ fetchActiveProducts: vi.fn() }));
+vi.mock("../catalog/productApi", () => ({ fetchActiveProducts: vi.fn(), listProducts: vi.fn() }));
 vi.mock("@mui/icons-material", () => ({
   Add: () => null,
   Delete: () => null,

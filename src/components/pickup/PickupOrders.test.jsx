@@ -5,17 +5,31 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { StoreLocationContext } from "../../context/storeLocationContext";
 import PickupOrders from "./PickupOrders";
+import { listProducts } from "../catalog/productApi";
+vi.mock("@mui/icons-material", () => ({ Inventory2: () => null }));
+vi.mock("../catalog/productApi", () => ({ listProducts: vi.fn(async () => ({ data: { items: [], total: 0 } })) }));
+vi.mock("../../helpers/file_helper", () => ({
+  getDisplayImageInfo: (picture) => ({ imageUrl: picture }), ThumbnailImg: () => null,
+}));
+vi.mock("../../helpers/camera_scanner_helper", () => ({
+  useCameraScanner: ({ onScan, normalize }) => ({
+    scannerOpen: false, scannerOverlay: null,
+    openScanner: () => onScan(normalize === false ? "ARRIVAL-TOKEN" : "WRONG-TOKEN"),
+  }),
+}));
 import { pickupOrder } from "./pickupTestData";
 import {
   listPickupOrders, getPickupOrder, allocatePickupLots, preparePickupOrder,
   verifyPickupCollection, handoverPickupOrder,
   recordPickupArrival, confirmPickupCash,
+  reconcilePickupOrder,
 } from "../../helpers/pickup_helper";
 
 vi.mock("../../helpers/pickup_helper", () => ({
   listPickupOrders: vi.fn(), getPickupOrder: vi.fn(), allocatePickupLots: vi.fn(),
   preparePickupOrder: vi.fn(), verifyPickupCollection: vi.fn(), handoverPickupOrder: vi.fn(),
   recordPickupArrival: vi.fn(), confirmPickupCash: vi.fn(),
+  reconcilePickupOrder: vi.fn(),
 }));
 vi.mock("react-i18next", () => {
   const t = (key, values) => values?.transactionId ? `${key} ${values.transactionId}` : key;
@@ -36,6 +50,7 @@ describe("staff pickup orders", () => {
   let current;
   beforeEach(() => {
     vi.resetAllMocks();
+    listProducts.mockResolvedValue({ data: { items: [], total: 0 } });
     current = structuredClone(pickupOrder);
     listPickupOrders.mockImplementation(async ({ page, size }) => ({
       data: { items: current.state === "HANDED_OVER" ? [] : [current], page, size, total: 1 },
@@ -131,7 +146,9 @@ describe("staff pickup orders", () => {
     await user.click(await screen.findByRole("button", { name: "pickup.openOrder TX-1" }));
     await user.click(await screen.findByRole("button", { name: "pickup.startPreparation" }));
     expect(await screen.findByText("Network unavailable")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "pickup.startPreparation" }));
+    expect(screen.getByRole("button", { name: "pickup.startPreparation" })).toBeDisabled();
+    await user.click(screen.getAllByRole("button", { name: "pickup.refresh" }).at(-1));
+    await user.click(await screen.findByRole("button", { name: "pickup.startPreparation" }));
     await waitFor(() => expect(preparePickupOrder).toHaveBeenCalledTimes(2));
     expect(preparePickupOrder.mock.calls[0][3]).toBe(preparePickupOrder.mock.calls[1][3]);
   });
@@ -141,6 +158,92 @@ describe("staff pickup orders", () => {
     render(shell());
     expect(await screen.findByText("pickup.invalidResponse")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "pickup.openOrder TX-1" })).not.toBeInTheDocument();
+  });
+
+  it("separates current and legacy records using server views and keeps legacy details read-only", async () => {
+    const disabledActions = {
+      canAllocateLots: false, canStartPreparation: false, canMarkReady: false,
+      canHandover: false, canRecordArrival: false, canConfirmCash: false,
+    };
+    const records = ["CASH", "E_PAYMENT", "CASH", "CASH", "PAY_AT_COUNTER", "PAY_AT_COUNTER"]
+      .map((paymentMode, index) => ({
+        ...structuredClone(pickupOrder), transactionId: `TX-${index + 1}`, paymentMode,
+        state: paymentMode === "E_PAYMENT" ? "PAYMENT_PENDING" : "CASH_PENDING_CONFIRMATION",
+        paymentStatus: "PENDING", preparationPolicy: index === 5 ? "ON_ARRIVAL" : null,
+        arrivalStatus: index === 5 ? "EXPECTED" : null,
+        actions: { ...disabledActions, canRecordArrival: index === 5 },
+      }));
+    listPickupOrders.mockImplementation(async ({ queueView, page, size }) => {
+      const items = records.filter((_, index) =>
+        queueView === "RECONCILIATION" ? ![1, 5].includes(index) : [1, 5].includes(index));
+      return { data: { items, total: items.length, page, size } };
+    });
+    getPickupOrder.mockResolvedValue({ data: records[0] });
+    const user = userEvent.setup();
+    render(shell());
+    await screen.findByRole("button", { name: "pickup.openOrder TX-6" });
+    expect(screen.getAllByRole("button", { name: /pickup.openOrder TX-/ })).toHaveLength(2);
+    expect(screen.queryByText("pickup.invalidResponse")).not.toBeInTheDocument();
+    expect(screen.queryByText("pickup.legacyReadOnly")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "pickup.reconciliation" }));
+    await screen.findByRole("button", { name: "pickup.openOrder TX-1" });
+    expect(listPickupOrders).toHaveBeenLastCalledWith({
+      storeId: "STORE-1", queueView: "RECONCILIATION", preparationStatus: "", page: 0, size: 20,
+    });
+    expect(screen.getAllByText("pickup.legacyReadOnly")).toHaveLength(4);
+    expect(screen.getByRole("combobox", { name: "pickup.filter" })).toHaveAttribute("aria-disabled", "true");
+    await user.click(screen.getByRole("button", { name: "pickup.openOrder TX-1" }));
+    await screen.findByRole("heading", { name: "pickup.orderTitle TX-1" });
+    expect(screen.queryByRole("button", { name: "pickup.confirmCash" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "pickup.startPreparation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "pickup.arrivalToken" })).not.toBeInTheDocument();
+  });
+
+  it("surfaces unsupported server filtering instead of hiding rows with incorrect pagination", async () => {
+    current.paymentMode = "CASH";
+    current.state = "CASH_PENDING_CONFIRMATION";
+    render(shell());
+    expect(await screen.findByText("pickup.queueViewUnsupported")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "pickup.openOrder TX-1" })).not.toBeInTheDocument();
+    expect(screen.queryByText("pickup.empty")).not.toBeInTheDocument();
+  });
+
+  it("records closure, reloads persisted review and removes the unscheduled order through the server queue", async () => {
+    current = { ...current, state: "PAYMENT_PENDING", paymentStatus: "PENDING",
+      pickupSlotStart: null, pickupSlotEnd: null, pickupExpiresAt: null,
+      actions: Object.fromEntries(Object.keys(current.actions).map((key) => [key, false])),
+      reconciliation: { required: true, reason: "MISSING_PICKUP_SCHEDULE",
+        allowedOutcomes: ["CLOSE_UNPAID"], latestReview: null },
+    };
+    listPickupOrders.mockImplementation(async ({ queueView, page, size }) => {
+      const items = queueView === "RECONCILIATION" && current.state !== "CANCELLED" ? [current] : [];
+      return { data: { items, page, size, total: items.length } };
+    });
+    reconcilePickupOrder.mockImplementation(async (_, __, payload) => {
+      current = { ...current, state: "CANCELLED", paymentStatus: "FAILED",
+        reconciliation: { required: false, reason: null, allowedOutcomes: [],
+          latestReview: { ...payload, reviewId: "REVIEW-1", reviewedBy: "STAFF-1",
+            reviewedAt: "2026-10-10T06:00:00Z" },
+        },
+      };
+      return { data: structuredClone(current) };
+    });
+    const user = userEvent.setup();
+    render(shell());
+    await user.click(screen.getByRole("button", { name: "pickup.reconciliation" }));
+    await user.click(await screen.findByRole("button", { name: "pickup.openOrder TX-1" }));
+    await user.click(await screen.findByRole("combobox", { name: "pickup.reviewOutcome" }));
+    await user.click(screen.getByRole("option", { name: "pickup.reconciliationOutcome.CLOSE_UNPAID" }));
+    await user.type(screen.getByLabelText(/pickup.reviewNote/), "No charge found, REF-123");
+    await user.click(screen.getByRole("checkbox", { name: "pickup.confirmCloseUnpaid" }));
+    await user.click(screen.getByRole("button", { name: "pickup.saveReview" }));
+    expect(await screen.findByText("pickup.empty")).toBeInTheDocument();
+    expect(await screen.findByText("No charge found, REF-123")).toBeInTheDocument();
+    expect(screen.getByText("pickup.transactionState: CANCELLED")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "pickup.openOrder TX-1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "pickup.saveReview" })).not.toBeInTheDocument();
+    expect(reconcilePickupOrder).toHaveBeenCalledWith("TX-1", "STORE-1",
+      { outcome: "CLOSE_UNPAID", note: "No charge found, REF-123" }, expect.any(String));
   });
 
   it("requires verified arrival and cash payment before preparing a pay-at-collection order", async () => {
@@ -174,7 +277,11 @@ describe("staff pickup orders", () => {
     expect(screen.getAllByText("pickup.awaitingArrival")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "pickup.startPreparation" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "staffCheckout.confirmCash" })).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("pickup.arrivalToken"), "ARRIVAL-TOKEN");
+    await user.click(screen.getByRole("button", { name: "pickup.scanArrival" }));
+    expect(screen.getByLabelText("pickup.arrivalToken")).toHaveValue("ARRIVAL-TOKEN");
+    expect(recordPickupArrival).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "pickup.recordArrival" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "pickup.customerPresent" }));
     await user.click(screen.getByRole("button", { name: "pickup.recordArrival" }));
     const cash = await screen.findByRole("button", { name: "staffCheckout.confirmCash" });
     expect(cash).toBeDisabled();
@@ -218,6 +325,9 @@ describe("staff pickup orders", () => {
     expect(await screen.findByText("Receipt could not be confirmed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "pickup.startPreparation" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "pickup.confirmHandover" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "staffCheckout.confirmCash" })).toBeDisabled();
+    await user.click(screen.getAllByRole("button", { name: "pickup.refresh" }).at(-1));
+    await user.type(await screen.findByLabelText(/staffCheckout.cashNote/), "Full amount received");
     await user.click(screen.getByRole("button", { name: "staffCheckout.confirmCash" }));
     await waitFor(() => expect(confirmPickupCash).toHaveBeenCalledTimes(2));
     expect(confirmPickupCash.mock.calls[0]).toEqual(confirmPickupCash.mock.calls[1]);
@@ -237,6 +347,7 @@ describe("staff pickup orders", () => {
     render(shell());
     await user.click(await screen.findByRole("button", { name: "pickup.openOrder TX-1" }));
     await user.type(await screen.findByLabelText("pickup.arrivalToken"), "OLD");
+    await user.click(screen.getByRole("checkbox", { name: "pickup.customerPresent" }));
     await user.click(screen.getByRole("button", { name: "pickup.recordArrival" }));
     expect(await screen.findByText("Arrival token expired")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "staffCheckout.confirmCash" })).not.toBeInTheDocument();
@@ -252,12 +363,30 @@ describe("staff pickup orders", () => {
     render(shell());
     await user.click(await screen.findByRole("button", { name: "pickup.next" }));
     await waitFor(() => expect(listPickupOrders).toHaveBeenLastCalledWith({
-      storeId: "STORE-1", preparationStatus: "", page: 1, size: 20,
+      storeId: "STORE-1", queueView: "ACTIVE", preparationStatus: "", page: 1, size: 20,
     }));
     await user.click(screen.getByRole("combobox", { name: "pickup.filter" }));
     await user.click(screen.getByRole("option", { name: "pickup.status.READY" }));
     await waitFor(() => expect(listPickupOrders).toHaveBeenLastCalledWith({
-      storeId: "STORE-1", preparationStatus: "READY", page: 0, size: 20,
+      storeId: "STORE-1", queueView: "ACTIVE", preparationStatus: "READY", page: 0, size: 20,
+    }));
+    current = { ...current, pickupTimingStatus: "OVERDUE" };
+    await user.click(screen.getByRole("combobox", { name: "pickup.filter" }));
+    await user.click(screen.getByRole("option", { name: "pickup.overdueFilter" }));
+    await waitFor(() => expect(listPickupOrders).toHaveBeenLastCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", preparationStatus: "", pickupTimingStatus: "OVERDUE", page: 0, size: 20,
+    }));
+    expect(await screen.findByRole("button", { name: "pickup.openOrder TX-1" })).toBeInTheDocument();
+    listPickupOrders.mockResolvedValue({ data: { items: [], page: 0, size: 20, total: 0 } });
+    await user.click(screen.getByRole("button", { name: "pickup.reconciliation" }));
+    await waitFor(() => expect(listPickupOrders).toHaveBeenLastCalledWith({
+      storeId: "STORE-1", queueView: "RECONCILIATION", preparationStatus: "", page: 0, size: 20,
+    }));
+    expect(await screen.findByText("pickup.empty")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "pickup.next" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "pickup.activePickup" }));
+    await waitFor(() => expect(listPickupOrders).toHaveBeenLastCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", preparationStatus: "", page: 0, size: 20,
     }));
   });
 
@@ -274,7 +403,7 @@ describe("staff pickup orders", () => {
     expect(await screen.findByRole("button", { name: "pickup.openOrder TX-2" })).toBeInTheDocument();
     expect(screen.queryByText("APPLE: 3 EA")).not.toBeInTheDocument();
     expect(listPickupOrders).toHaveBeenLastCalledWith({
-      storeId: "STORE-2", preparationStatus: "", page: 0, size: 20,
+      storeId: "STORE-2", queueView: "ACTIVE", preparationStatus: "", page: 0, size: 20,
     });
   });
 });

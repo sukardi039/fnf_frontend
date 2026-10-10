@@ -21,13 +21,26 @@ describe("pickup schedule display", () => {
 
   it("shows the slot and deadline in the store timezone", () => {
     render(<PickupSchedule order={order} />);
-    expect(screen.getByText("customer.cart.pickupScheduled 21:00 - 21:30 Asia/Singapore")).toBeInTheDocument();
+    expect(screen.getByText(/customer.cart.pickupScheduled .*21:00 - 21:30 Asia\/Singapore/)).toBeInTheDocument();
     expect(screen.getByText("customer.cart.pickupDeadline 22:00")).toBeInTheDocument();
   });
 
   it("does not invent a schedule for legacy orders", () => {
     const { container } = render(<PickupSchedule order={{}} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows compact pickup information with a separate store timezone", () => {
+    render(<PickupSchedule order={order} compact />);
+    expect(screen.getByText(/customer.orders.pickupSlot .*21:00 - 21:30/)).toBeInTheDocument();
+    expect(screen.getByText("customer.orders.collectBy 22:00")).toBeInTheDocument();
+    expect(screen.getByText("customer.orders.storeTimezone Asia/Singapore")).toBeInTheDocument();
+  });
+
+  it("labels paid pickup deadlines as due times in compact mode", () => {
+    render(<PickupSchedule order={{ ...order, paymentStatus: "SUCCESS" }} compact />);
+    expect(screen.getByText("customer.orders.collectionDue 22:00")).toBeInTheDocument();
+    expect(screen.queryByText(/customer.orders.collectBy/)).not.toBeInTheDocument();
   });
 
   it.each([

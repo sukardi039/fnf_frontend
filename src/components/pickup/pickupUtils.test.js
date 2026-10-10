@@ -1,8 +1,83 @@
 import { describe, expect, it } from "vitest";
-import { buildPickupAllocations, validatePickupOrder } from "./pickupUtils";
+import { buildPickupAllocations, matchesPickupQueueView, validatePickupOrder } from "./pickupUtils";
 import { pickupOrder } from "./pickupTestData";
 
 describe("pickup order validation", () => {
+  it("routes wholly unscheduled online orders to reconciliation regardless of age", () => {
+    const unscheduled = { ...pickupOrder, state: "PAYMENT_PENDING", paymentStatus: "PENDING",
+      pickupSlotStart: null, pickupSlotEnd: null, pickupExpiresAt: null,
+      actions: Object.fromEntries(Object.keys(pickupOrder.actions).map((key) => [key, false])) };
+    expect(matchesPickupQueueView(unscheduled, "ACTIVE")).toBe(false);
+    expect(matchesPickupQueueView(unscheduled, "RECONCILIATION")).toBe(true);
+    expect(validatePickupOrder(unscheduled, "STORE-1", "TX-1")).toBe(unscheduled);
+    expect(() => validatePickupOrder({ ...unscheduled,
+      actions: { ...unscheduled.actions, canStartPreparation: true },
+    }, "STORE-1", "TX-1")).toThrow("pickup.invalidResponse");
+  });
+  it.each(["HANDED_OVER", "CANCELLED", "REFUNDED"])("keeps %s out of both operational views", (state) => {
+    const order = { ...pickupOrder, state, paymentMode: "CASH" };
+    expect(matchesPickupQueueView(order, "ACTIVE")).toBe(false);
+    expect(matchesPickupQueueView(order, "RECONCILIATION")).toBe(false);
+  });
+  it("separates reconciliation from active orders without excluding paid overdue or held orders", () => {
+    for (const order of [
+      pickupOrder, { ...pickupOrder, pickupTimingStatus: "OVERDUE" },
+      { ...pickupOrder, fulfilmentHoldReason: "LATE_PAYMENT" },
+      { ...pickupOrder, paymentResolutionStatus: "CHECKING" },
+    ]) {
+      expect(matchesPickupQueueView(order, "ACTIVE")).toBe(true);
+      expect(matchesPickupQueueView(order, "RECONCILIATION")).toBe(false);
+    }
+    for (const order of [
+      { ...pickupOrder, paymentMode: "CASH" },
+      { ...pickupOrder, state: "EXPIRED", paymentStatus: "SUCCESS" },
+    ]) {
+      expect(matchesPickupQueueView(order, "ACTIVE")).toBe(false);
+      expect(matchesPickupQueueView(order, "RECONCILIATION")).toBe(true);
+    }
+    const expired = { ...pickupOrder, state: "EXPIRED", paymentStatus: "PENDING" };
+    expect(matchesPickupQueueView(expired, "ACTIVE")).toBe(false);
+    expect(matchesPickupQueueView(expired, "RECONCILIATION")).toBe(false);
+  });
+  it.each(["LATE_PAYMENT", "QUALITY_REVIEW"])("accepts %s holds only with all actions disabled", (reason) => {
+    const held = { ...pickupOrder, fulfilmentHoldReason: reason,
+      actions: Object.fromEntries(Object.keys(pickupOrder.actions).map((key) => [key, false])) };
+    expect(validatePickupOrder(held, "STORE-1", "TX-1")).toBe(held);
+    expect(() => validatePickupOrder({ ...held,
+      actions: { ...held.actions, canStartPreparation: true },
+    }, "STORE-1", "TX-1")).toThrow("pickup.invalidResponse");
+  });
+  it("keeps overdue paid preparation eligible", () => {
+    const overdue = { ...pickupOrder, pickupTimingStatus: "OVERDUE" };
+    expect(validatePickupOrder(overdue, "STORE-1", "TX-1")).toBe(overdue);
+  });
+  it("accepts expired arrival policy only for read-only terminal details", () => {
+    const expired = { ...pickupOrder, paymentMode: "PAY_AT_COUNTER",
+      preparationPolicy: "ON_ARRIVAL", arrivalStatus: "EXPIRED", state: "EXPIRED",
+      actions: {
+        canRecordArrival: false, canConfirmCash: false, canAllocateLots: false,
+        canStartPreparation: false, canMarkReady: false, canHandover: false,
+      },
+    };
+    expect(validatePickupOrder(expired, "STORE-1", "TX-1")).toBe(expired);
+    expect(() => validatePickupOrder({ ...expired,
+      actions: { ...expired.actions, canHandover: true },
+    }, "STORE-1", "TX-1")).toThrow("pickup.invalidResponse");
+  });
+  it.each(["CASH", "PAY_AT_COUNTER"])("accepts legacy %s detail only when every action is disabled", (paymentMode) => {
+    const legacy = { ...pickupOrder, paymentMode, preparationPolicy: null, arrivalStatus: null,
+      state: "CASH_PENDING_CONFIRMATION", paymentStatus: "PENDING",
+      actions: {
+        canRecordArrival: false, canConfirmCash: false, canAllocateLots: false,
+        canStartPreparation: false, canMarkReady: false, canHandover: false,
+      },
+    };
+    expect(validatePickupOrder(legacy, "STORE-1", "TX-1")).toBe(legacy);
+    expect(() => validatePickupOrder({ ...legacy,
+      actions: { ...legacy.actions, canConfirmCash: true },
+    }, "STORE-1", "TX-1")).toThrow("pickup.invalidResponse");
+  });
+
   it("accepts scoped mobile order details and rejects mismatched store, transaction and channel", () => {
     expect(validatePickupOrder(pickupOrder, "STORE-1", "TX-1")).toBe(pickupOrder);
     expect(() => validatePickupOrder(pickupOrder, "STORE-2", "TX-1")).toThrow("pickup.invalidResponse");

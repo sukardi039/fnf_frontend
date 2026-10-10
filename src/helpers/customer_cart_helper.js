@@ -40,14 +40,17 @@ export const listCustomerTransactions = (params = {}) => {
   });
 };
 
-const TERMINAL_ORDER_STATES = new Set([
-  "HANDED_OVER", "CANCELLED", "REFUNDED", "EXPIRED",
-]);
+const COMPLETED_ORDER_STATES = new Set(["HANDED_OVER", "CANCELLED", "REFUNDED"]);
 
-export const countIncompleteCustomerOrders = async (customerId) => {
+export const isCurrentCustomerOrder = (order) =>
+  !COMPLETED_ORDER_STATES.has(order.state) &&
+  (order.state !== "EXPIRED" || order.paymentStatus === "SUCCESS" ||
+    ["IN_FLIGHT", "CHECKING"].includes(order.paymentResolutionStatus) ||
+    Boolean(order.fulfilmentHoldReason));
+
+export const listAllCustomerTransactions = async (customerId) => {
   let page = 0;
-  let count = 0;
-  let received = 0;
+  const items = [];
   let total;
   do {
     const response = await listCustomerTransactions({ customerId, page, size: 100 });
@@ -57,12 +60,14 @@ export const countIncompleteCustomerOrders = async (customerId) => {
       throw new Error("Invalid customer order history response");
     }
     total = data.total;
-    if (data.items.length === 0 && received < total) {
+    if (data.items.length === 0 && items.length < total) {
       throw new Error("Incomplete customer order history response");
     }
-    count += data.items.filter((item) => !TERMINAL_ORDER_STATES.has(item.state)).length;
-    received += data.items.length;
+    items.push(...data.items);
     page += 1;
-  } while (received < total);
-  return count;
+  } while (items.length < total);
+  return items;
 };
+
+export const countIncompleteCustomerOrders = async (customerId) =>
+  (await listAllCustomerTransactions(customerId)).filter(isCurrentCustomerOrder).length;

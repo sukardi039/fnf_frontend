@@ -10,14 +10,19 @@ const mutate = (path, data, key) =>
     headers: { "Idempotency-Key": key },
   });
 
-export const listPickupOrders = ({ storeId, preparationStatus, page = 0, size = 20 }) => {
+export const listPickupOrders = ({ storeId, queueView, preparationStatus, pickupTimingStatus, page = 0, size = 20 }) => {
   const query = new URLSearchParams({ storeId, page: String(page), size: String(size) });
+  if (queueView) query.set("queueView", queueView);
   if (preparationStatus) query.set("preparationStatus", preparationStatus);
+  if (pickupTimingStatus) query.set("pickupTimingStatus", pickupTimingStatus);
   return request("GET", `/api/pickup-orders?${query}`, null, options);
 };
 
 export const getPickupOrder = (transactionId, storeId) =>
   request("GET", `${orderPath(transactionId)}${scope(storeId)}`, null, options);
+
+export const reconcilePickupOrder = (transactionId, storeId, review, key) =>
+  mutate(`${orderPath(transactionId)}/reconciliation${scope(storeId)}`, review, key);
 
 export const allocatePickupLots = (transactionId, storeId, allocations, key) =>
   mutate(`${orderPath(transactionId)}/lot-allocations${scope(storeId)}`, { allocations }, key);

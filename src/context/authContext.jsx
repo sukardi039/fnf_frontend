@@ -28,14 +28,8 @@
  */
 import { request, getAuthToken, setAuthHeader } from "../helpers/axios_helper";
 import React, { createContext, useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Typography,
-} from "@mui/material";
+import PropTypes from "prop-types";
+import { currentSessionInterface } from "../helpers/session_helper";
 import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
@@ -51,11 +45,10 @@ const AuthProvider = ({ children }) => {
   const [menus, setMenus] = useState([]);
   const [languages, setLanguages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState();
+  const [, setError] = useState();
   const [openMenu, setOpenMenu] = useState(false);
   const [currMenu, setCurrMenu] = useState("main");
   const [openNotice, setOpenNotice] = useState(false);
-  const [expiredDialogOpen, setExpiredDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   const login = (user) => {
@@ -75,29 +68,30 @@ const AuthProvider = ({ children }) => {
   // Check for existing token on mount
   useEffect(() => {
     // Listen to global auth expiration events dispatched by axios helper
-    const onExpired = () => {
-      setExpiredDialogOpen(true);
+    const onExpired = (event) => {
+      if (event.detail.interface === "WEB") {
+        setIsAuthenticated(false);
+        setUserInfo({});
+        setCurrentAction(null);
+        setRoles([]);
+        setMenus([]);
+        setParam(undefined);
+      }
+      if (currentSessionInterface() === event.detail.interface) {
+        event.detail.handled = true;
+        navigate(event.detail.loginPath, { replace: true });
+      }
     };
     window.addEventListener("auth:expired", onExpired);
 
     return () => {
       window.removeEventListener("auth:expired", onExpired);
     };
-  }, []);
-
-  const handleExpiredContinue = () => {
-    // Clear local auth state and redirect to login
-    setAuthHeader(null);
-    localStorage.removeItem("user_info");
-    setIsAuthenticated(false);
-    setUserInfo({});
-    setExpiredDialogOpen(false);
-    navigate("/login");
-  };
+  }, [navigate]);
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (window.location.pathname.startsWith("/m/")) {
+      if (["MOBILE", "PDA"].includes(currentSessionInterface())) {
         setLoading(false);
         return;
       }
@@ -117,7 +111,7 @@ const AuthProvider = ({ children }) => {
             setUserInfo(userData);
             setLoading(false);
           }
-        } catch (error) {
+        } catch {
           // Token is invalid or expired
           setAuthHeader(null); // Clear invalid token
           localStorage.removeItem("user_info");
@@ -270,23 +264,8 @@ const AuthProvider = ({ children }) => {
         children
       )}
 
-      <Dialog
-        open={expiredDialogOpen}
-        onClose={() => setExpiredDialogOpen(false)}
-      >
-        <DialogTitle>{"Session Expired"}</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Your session has expired. Please sign in again to continue.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleExpiredContinue} color="primary">
-            Sign in
-          </Button>
-        </DialogActions>
-      </Dialog>
     </AuthContext.Provider>
   );
 };
+AuthProvider.propTypes = { children: PropTypes.node };
 export { AuthContext, AuthProvider };

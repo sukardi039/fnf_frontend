@@ -9,6 +9,10 @@ export const pickupOrder = {
   amount: "18.00",
   currency: "MYR",
   createdAt: "2026-10-09T03:00:00Z",
+  pickupSlotStart: "2026-10-09T10:00:00Z",
+  pickupSlotEnd: "2026-10-09T10:30:00Z",
+  pickupExpiresAt: "2026-10-09T11:00:00Z",
+  pickupTimezone: "Asia/Singapore",
   items: [{
     saleLineId: "LINE-1",
     skuId: "APPLE",

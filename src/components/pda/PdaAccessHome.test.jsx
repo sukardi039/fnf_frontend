@@ -1,44 +1,25 @@
 import React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import PdaAccessHome from "./PdaAccessHome";
-import { resolvePdaScan, confirmHandover } from "../../helpers/pda_helper";
 
-vi.mock("../../helpers/pda_helper", () => ({ resolvePdaScan: vi.fn(), confirmHandover: vi.fn() }));
-vi.mock("@mui/icons-material", () => ({ CheckCircleOutline: () => null, QrCodeScanner: () => null }));
-vi.mock("react-i18next", () => {
-  const t = (key) => key;
-  return { useTranslation: () => ({ t }) };
-});
+function Destination() {
+  const location = useLocation();
+  return <div>{location.pathname}{location.search}</div>;
+}
 
-describe("legacy PDA pickup verification", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    localStorage.setItem("pda_user_info", JSON.stringify({ staffId: "STAFF-1", deviceId: "DEVICE-1" }));
-  });
-  afterEach(() => { cleanup(); localStorage.removeItem("pda_user_info"); });
-
-  it.each([undefined, "PREPARING", "READY"])("requires packed readiness, not payment eligibility alone (%s)", async (preparationStatus) => {
-    resolvePdaScan.mockResolvedValue({
-      data: {
-        transactionId: "TX-1", state: "READY_FOR_HANDOVER", paymentStatus: "SUCCESS",
-        preparationStatus, handoverEligible: true,
-        summary: { itemCount: 2, total: 10, currency: "MYR" },
-      },
-    });
-    const user = userEvent.setup();
-    render(<MemoryRouter><PdaAccessHome /></MemoryRouter>);
-    await user.type(screen.getByLabelText("pda.handover.collectionToken"), "TOKEN");
-    await user.click(screen.getByRole("button", { name: "pda.handover.verify" }));
-    expect(await screen.findByRole("link", { name: "pickup.title" }))
-      .toHaveAttribute("href", "/pda/pickup?transactionId=TX-1");
-    if (preparationStatus === "READY") {
-      expect(screen.getByRole("button", { name: "pda.handover.confirm" })).toBeInTheDocument();
-    } else {
-      expect(screen.queryByRole("button", { name: "pda.handover.confirm" })).not.toBeInTheDocument();
-    }
-    expect(confirmHandover).not.toHaveBeenCalled();
-  });
+describe("PDA shared pickup entry", () => {
+  afterEach(cleanup);
+  it.each(["/pda/home", "/pda/home?transactionId=TX-1"])(
+    "redirects old collection entry to the shared workflow (%s)", async (entry) => {
+      render(<MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/pda/home" element={<PdaAccessHome />} />
+          <Route path="/pda/pickup" element={<Destination />} />
+        </Routes>
+      </MemoryRouter>);
+      expect(await screen.findByText(entry.replace("/home", "/pickup"))).toBeInTheDocument();
+    },
+  );
 });
