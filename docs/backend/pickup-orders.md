@@ -1314,11 +1314,6 @@ Never return success-shaped empty data when an operation is unsupported.
     the total in Current/Past, with no details-unavailable warning for valid
     lines. Existing QR eligibility and totals must remain unchanged.
 
-  Workflow alignment follow-up is intentionally deferred. Once the user
-  confirms this backend change is implemented, create a separate
-  alignment-focused Markdown file for frontend/backend workflow contracts,
-  confirmed gaps and verification status. Do not create that file or expand
-  this immediate handoff into a general alignment audit before confirmation.
 - The customer Orders screen requests a collection token only for
   `MOBILE_ORDER` transactions with `preparationStatus: "READY"` in
   `PAYMENT_SUCCESS` or `READY_FOR_HANDOVER`.
