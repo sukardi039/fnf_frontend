@@ -127,15 +127,29 @@ describe("customer pickup history", () => {
   });
 
   it("shows the scheduled deadline and does not describe expired orders as awaiting preparation", async () => {
-    listAllCustomerTransactions.mockResolvedValue([{
-      transactionId: "EXPIRED-1", channel: "MOBILE_ORDER", paymentMode: "PAY_AT_COUNTER",
-      state: "EXPIRED", preparationStatus: "NOT_STARTED", currency: "SGD", amount: 9,
-      pickupSlotStart: "2026-10-09T10:00:00Z", pickupSlotEnd: "2026-10-09T10:30:00Z",
-      pickupExpiresAt: "2026-10-09T11:00:00Z", pickupTimezone: "Asia/Singapore",
-    }]);
-    render(<CustomerOrders />);
+    listAllCustomerTransactions.mockResolvedValue([
+      {
+        transactionId: "EXPIRED-1", channel: "MOBILE_ORDER", paymentMode: "PAY_AT_COUNTER",
+        state: "EXPIRED", preparationStatus: "NOT_STARTED", currency: "SGD", amount: 9,
+        pickupSlotStart: "2026-10-09T10:00:00Z", pickupSlotEnd: "2026-10-09T10:30:00Z",
+        pickupExpiresAt: "2026-10-09T11:00:00Z", pickupTimezone: "Asia/Singapore",
+      },
+      { transactionId: "CANCELLED-1", state: "CANCELLED" },
+      { transactionId: "REFUNDED-1", state: "REFUNDED" },
+      { transactionId: "HANDED-OVER-1", state: "HANDED_OVER" },
+    ]);
+    const { rerender } = render(<CustomerOrders />);
     await userEvent.click(await screen.findByRole("tab", { name: "customer.orders.past" }));
+    expect(screen.getByText("HANDED-OVER-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXPIRED-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("CANCELLED-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("REFUNDED-1")).not.toBeInTheDocument();
+    rerender(<CustomerOrders showAbortedOrders />);
     expect(await screen.findByText("customer.orders.expired")).toBeInTheDocument();
+    expect(screen.getByText("EXPIRED-1")).toBeInTheDocument();
+    expect(screen.getByText("CANCELLED-1")).toBeInTheDocument();
+    expect(screen.getByText("REFUNDED-1")).toBeInTheDocument();
+    expect(screen.queryByText("HANDED-OVER-1")).not.toBeInTheDocument();
     expect(screen.getByText("customer.orders.pickupSlot")).toBeInTheDocument();
     expect(screen.getByText("customer.orders.collectBy")).toBeInTheDocument();
     expect(screen.queryByText("pickup.status.NOT_STARTED")).not.toBeInTheDocument();

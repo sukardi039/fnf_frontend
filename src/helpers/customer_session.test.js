@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, request } from "./axios_helper";
-import { clearCustomerSession, storeCustomerSession } from "./customer_helper";
+import {
+  clearCustomerSession,
+  storeCustomerSession,
+  updateCustomerProfile,
+} from "./customer_helper";
 import { listCustomerTransactions } from "./customer_cart_helper";
 
 describe("customer and system session isolation", () => {
@@ -34,6 +38,33 @@ describe("customer and system session isolation", () => {
     expect(config.headers.get("Authorization")).toBeUndefined();
     expect(config.withCredentials).toBe(true);
     expect(localStorage.getItem("auth_token")).toBe("system-session");
+  });
+
+  it("updates customer profile through the customer-scoped endpoint", async () => {
+    window.history.replaceState({}, "", "/m/profile");
+    storeCustomerSession({
+      data: {
+        principalType: "CUSTOMER",
+        customerId: "CUSTOMER/1",
+        mobileNumber: "12345678",
+      },
+    });
+    expect(JSON.parse(localStorage.getItem("customer_info")).mobileNumber).toBe("12345678");
+    await updateCustomerProfile("CUSTOMER/1", {
+      name: "Updated",
+      email: "updated@example.com",
+      mobileNumber: "12345678",
+    });
+    const config = api.defaults.adapter.mock.calls[0][0];
+    expect(config.url).toBe("/api/customers/CUSTOMER%2F1");
+    expect(config.method).toBe("put");
+    expect(config.withCredentials).toBe(true);
+    expect(JSON.parse(config.data)).toEqual({
+      name: "Updated",
+      email: "updated@example.com",
+      mobileNumber: "12345678",
+    });
+    expect(config.headers.get("Authorization")).toBeUndefined();
   });
 
   it("keeps transitional customer tokens separate and preserves system login on customer logout", async () => {

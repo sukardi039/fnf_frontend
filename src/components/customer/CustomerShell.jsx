@@ -11,16 +11,22 @@ import { useTranslation } from "react-i18next";
 import {
   AppBar,
   Alert,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Badge,
   BottomNavigation,
   BottomNavigationAction,
   Box,
   Button,
   Paper,
+  Stack,
+  TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
 import {
+  ExpandMore as ExpandMoreIcon,
   Storefront as BrowseIcon,
   ShoppingCart as CartIcon,
   ListAlt as OrdersIcon,
@@ -37,6 +43,8 @@ import {
   storeCustomerSession,
   clearCustomerSession,
   getCustomerInfo,
+  updateCustomerProfile,
+  storeCustomerInfo,
 } from "../../helpers/customer_helper";
 import { countIncompleteCustomerOrders } from "../../helpers/customer_cart_helper";
 import { currentSessionInterface } from "../../helpers/session_helper";
@@ -109,24 +117,157 @@ function useCartState() {
   return { items, addItem, removeItem, updateQuantity, clearCart };
 }
 
-function CustomerProfile({ onLogout }) {
+function CustomerProfile({ customer, onProfileUpdated }) {
   const { t } = useTranslation();
-  const customer = getCustomerInfo();
+  const [form, setForm] = useState({
+    name: customer?.name || "",
+    email: customer?.email || "",
+    mobileNumber: customer?.mobileNumber || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+    setSaved(false);
+    setError("");
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    const profile = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      mobileNumber: form.mobileNumber.trim(),
+    };
+    try {
+      const response = await updateCustomerProfile(customer.customerId, profile);
+      const responseProfile = response?.data?.customer || response?.data || {};
+      const updatedCustomer = {
+        ...customer,
+        name: responseProfile.name ?? profile.name,
+        email: responseProfile.email ?? profile.email,
+        mobileNumber: responseProfile.mobileNumber ?? profile.mobileNumber,
+      };
+      storeCustomerInfo(updatedCustomer);
+      onProfileUpdated(updatedCustomer);
+      setForm({
+        name: updatedCustomer.name,
+        email: updatedCustomer.email,
+        mobileNumber: updatedCustomer.mobileNumber,
+      });
+      setSaved(true);
+      setEditing(false);
+    } catch (err) {
+      setError(err?.response?.data?.message || t("customer.profile.updateFailed", "Unable to update profile."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        {t("customer.profile.title", "Profile")}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 1 }}>
+        <Typography variant="h6" component="h1">
+          {t("customer.profile.title", "Profile")}
+        </Typography>
+        {customer && !editing && (
+          <Button
+            variant="outlined"
+            onClick={() => setEditing(true)}
+            sx={{ minHeight: 44, flexShrink: 0 }}
+          >
+            {t("customer.profile.edit", "Edit")}
+          </Button>
+        )}
+      </Stack>
       {customer ? (
         <>
-          <Typography variant="body1">{customer.name}</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {customer.email}
-          </Typography>
-          <Button variant="contained" color="error" onClick={onLogout}
-            sx={{ mt: 3, minHeight: 44 }}>
-            {t("customerAuth.logout", "Logout")}
-          </Button>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          {saved && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {t("customer.profile.updateSuccess", "Profile updated.")}
+            </Alert>
+          )}
+          {editing ? (
+            <Box component="form" onSubmit={handleSubmit} sx={{ display: "grid", gap: 2, maxWidth: 480 }}>
+              <TextField
+                label={t("customer.profile.name", "Full name")}
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                fullWidth
+              />
+              <TextField
+                label={t("customer.profile.email", "Email")}
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                required
+                fullWidth
+              />
+              <TextField
+                label={t("customer.profile.mobileNumber", "Mobile number")}
+                name="mobileNumber"
+                value={form.mobileNumber}
+                onChange={handleChange}
+                fullWidth
+              />
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Button type="submit" variant="contained" disabled={saving} sx={{ minHeight: 44 }}>
+                  {saving
+                    ? t("common.saving", "Saving...")
+                    : t("customer.profile.save", "Save changes")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={saving}
+                  sx={{ minHeight: 44 }}
+                  onClick={() => {
+                    setForm({
+                      name: customer.name || "",
+                      email: customer.email || "",
+                      mobileNumber: customer.mobileNumber || "",
+                    });
+                    setError("");
+                    setEditing(false);
+                  }}
+                >
+                  {t("common.cancel", "Cancel")}
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Box sx={{ display: "grid", gap: 1, minWidth: 0 }}>
+              <Typography variant="body1">{customer.name}</Typography>
+              <Typography variant="body2" color="text.secondary">{customer.email}</Typography>
+              {customer.mobileNumber && (
+                <Typography variant="body2" color="text.secondary">{customer.mobileNumber}</Typography>
+              )}
+            </Box>
+          )}
+          <Accordion sx={{ mt: 3 }}>
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              aria-controls="profile-aborted-orders-panel"
+              id="profile-aborted-orders-heading"
+            >
+              <Typography component="h2">
+                {t("customer.profile.abortedOrders", "Expired or aborted orders")}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails id="profile-aborted-orders-panel">
+              <CustomerOrders showAbortedOrders />
+            </AccordionDetails>
+          </Accordion>
         </>
       ) : (
         <Typography variant="body2" color="text.secondary">
@@ -136,8 +277,15 @@ function CustomerProfile({ onLogout }) {
     </Box>
   );
 }
-
-CustomerProfile.propTypes = { onLogout: PropTypes.func.isRequired };
+CustomerProfile.propTypes = {
+  customer: PropTypes.shape({
+    customerId: PropTypes.string,
+    name: PropTypes.string,
+    email: PropTypes.string,
+    mobileNumber: PropTypes.string,
+  }),
+  onProfileUpdated: PropTypes.func.isRequired,
+};
 
 export default function CustomerShell() {
   const { t } = useTranslation();
@@ -318,7 +466,15 @@ export default function CustomerShell() {
             }
           />
           <Route path="/orders" element={<CustomerOrders />} />
-          <Route path="/profile" element={<CustomerProfile onLogout={handleLogout} />} />
+          <Route
+            path="/profile"
+            element={
+              <CustomerProfile
+                customer={customer}
+                onProfileUpdated={setCustomer}
+              />
+            }
+          />
           <Route path="/" element={<Navigate to="/m/browse" replace />} />
           <Route path="/*" element={<CustomerComingSoon />} />
         </Routes>
@@ -365,7 +521,7 @@ export default function CustomerShell() {
             ) : <OrdersIcon />}
           />
           <BottomNavigationAction
-            label={t("customer.menu.profile", "Profile")}
+            label={t("customer.menu.me", "Me")}
             icon={<ProfileIcon />}
           />
         </BottomNavigation>

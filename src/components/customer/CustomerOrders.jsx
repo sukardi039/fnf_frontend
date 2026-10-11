@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import PropTypes from "prop-types";
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Tab, Tabs, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { LoadingState, EmptyState } from "../common";
@@ -24,7 +25,7 @@ const STATUS_COLORS = {
 };
 const PAGE_SIZE = 20;
 
-export default function CustomerOrders() {
+export default function CustomerOrders({ showAbortedOrders = false }) {
   const customer = useMemo(() => getCustomerInfo(), []);
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
@@ -35,9 +36,16 @@ export default function CustomerOrders() {
   const [view, setView] = useState("CURRENT");
   const filteredItems = useMemo(
     () => items
-      .filter((item) => isCurrentCustomerOrder(item) === (view === "CURRENT"))
+      .filter((item) => {
+        if (showAbortedOrders) {
+          return !isCurrentCustomerOrder(item) && item.state !== "HANDED_OVER";
+        }
+        return view === "CURRENT"
+          ? isCurrentCustomerOrder(item)
+          : item.state === "HANDED_OVER";
+      })
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)),
-    [items, view],
+    [items, showAbortedOrders, view],
   );
   const total = filteredItems.length;
   const currentPage = Math.min(page, Math.max(0, Math.ceil(total / PAGE_SIZE) - 1));
@@ -70,7 +78,9 @@ export default function CustomerOrders() {
   return (
     <Box sx={{ px: 2, pb: 2, maxWidth: 640, mx: "auto", minWidth: 0 }}>
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 1, mb: 1 }}>
-        <Typography variant="h6" component="h1">{t("customer.orders.title")}</Typography>
+        {!showAbortedOrders && (
+          <Typography variant="h6" component="h1">{t("customer.orders.title")}</Typography>
+        )}
         <Button
           size="small"
           variant="outlined"
@@ -80,17 +90,25 @@ export default function CustomerOrders() {
           {t("pickup.refresh")}
         </Button>
       </Box>
-      <Tabs
-        value={view}
-        onChange={(_, value) => { setView(value); setPage(0); }}
-        variant="fullWidth"
-        aria-label={t("customer.orders.views")}
-        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+      {!showAbortedOrders && (
+        <Tabs
+          value={view}
+          onChange={(_, value) => { setView(value); setPage(0); }}
+          variant="fullWidth"
+          aria-label={t("customer.orders.views")}
+          sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+        >
+          <Tab value="CURRENT" label={t("customer.orders.current")} id="orders-current-tab" aria-controls="orders-panel" />
+          <Tab value="PAST" label={t("customer.orders.past")} id="orders-past-tab" aria-controls="orders-panel" />
+        </Tabs>
+      )}
+      <Box
+        role={showAbortedOrders ? "region" : "tabpanel"}
+        id={showAbortedOrders ? undefined : "orders-panel"}
+        aria-labelledby={showAbortedOrders
+          ? "profile-aborted-orders-heading"
+          : view === "CURRENT" ? "orders-current-tab" : "orders-past-tab"}
       >
-        <Tab value="CURRENT" label={t("customer.orders.current")} id="orders-current-tab" aria-controls="orders-panel" />
-        <Tab value="PAST" label={t("customer.orders.past")} id="orders-past-tab" aria-controls="orders-panel" />
-      </Tabs>
-      <Box role="tabpanel" id="orders-panel" aria-labelledby={view === "CURRENT" ? "orders-current-tab" : "orders-past-tab"}>
         {!loading && !error && pictureError && (
           <Alert severity="warning" sx={{ mb: 2 }}>{t("customer.cart.picturesFailed")}</Alert>
         )}
@@ -98,8 +116,12 @@ export default function CustomerOrders() {
           <Alert severity="error">{error}</Alert>
         ) : total === 0 ? (
           <EmptyState
-            title={t(view === "CURRENT" ? "customer.orders.noCurrent" : "customer.orders.noPast")}
-            description={t(view === "CURRENT" ? "customer.orders.noCurrentDescription" : "customer.orders.noPastDescription")}
+            title={t(showAbortedOrders
+              ? "customer.profile.noAbortedOrders"
+              : view === "CURRENT" ? "customer.orders.noCurrent" : "customer.orders.noPast")}
+            description={t(showAbortedOrders
+              ? "customer.profile.noAbortedOrdersDescription"
+              : view === "CURRENT" ? "customer.orders.noCurrentDescription" : "customer.orders.noPastDescription")}
           />
         ) : (
           <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
@@ -224,3 +246,5 @@ export default function CustomerOrders() {
     </Box>
   );
 }
+
+CustomerOrders.propTypes = { showAbortedOrders: PropTypes.bool };
