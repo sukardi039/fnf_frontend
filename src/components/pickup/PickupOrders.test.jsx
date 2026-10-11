@@ -6,18 +6,23 @@ import { MemoryRouter } from "react-router-dom";
 import { StoreLocationContext } from "../../context/storeLocationContext";
 import PickupOrders from "./PickupOrders";
 import { listProducts } from "../catalog/productApi";
-vi.mock("@mui/icons-material", () => ({ Inventory2: () => null }));
+vi.mock("@mui/icons-material", () => ({
+  Inventory2: () => null,
+  QrCodeScanner: () => null,
+}));
 vi.mock("../catalog/productApi", () => ({ listProducts: vi.fn(async () => ({ data: { items: [], total: 0 } })) }));
 vi.mock("../../helpers/file_helper", () => ({
   getDisplayImageInfo: (picture) => ({ imageUrl: picture }), ThumbnailImg: () => null,
 }));
+const cameraScan = vi.hoisted(() => ({ value: "ARRIVAL-TOKEN" }));
 vi.mock("../../helpers/camera_scanner_helper", () => ({
-  useCameraScanner: ({ onScan, normalize }) => ({
+  useCameraScanner: ({ onScan }) => ({
     scannerOpen: false, scannerOverlay: null,
-    openScanner: () => onScan(normalize === false ? "ARRIVAL-TOKEN" : "WRONG-TOKEN"),
+    openScanner: () => onScan(cameraScan.value),
   }),
 }));
 import { pickupOrder } from "./pickupTestData";
+import { startPdaPayment } from "../../helpers/pda_payment_helper";
 import {
   listPickupOrders, getPickupOrder, allocatePickupLots, preparePickupOrder,
   verifyPickupCollection, handoverPickupOrder,
@@ -25,6 +30,9 @@ import {
   reconcilePickupOrder,
 } from "../../helpers/pickup_helper";
 
+vi.mock("../../helpers/pda_payment_helper", () => ({
+  startPdaPayment: vi.fn(),
+}));
 vi.mock("../../helpers/pickup_helper", () => ({
   listPickupOrders: vi.fn(), getPickupOrder: vi.fn(), allocatePickupLots: vi.fn(),
   preparePickupOrder: vi.fn(), verifyPickupCollection: vi.fn(), handoverPickupOrder: vi.fn(),
@@ -36,9 +44,9 @@ vi.mock("react-i18next", () => {
   return { useTranslation: () => ({ t }) };
 });
 
-function shell(storeId = "STORE-1") {
+function shell(storeId = "STORE-1", route = "/") {
   return (
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[route]}>
       <StoreLocationContext.Provider value={{ storeId }}>
         <PickupOrders />
       </StoreLocationContext.Provider>
@@ -46,10 +54,19 @@ function shell(storeId = "STORE-1") {
   );
 }
 
+const pdaShell = () => shell("STORE-1", "/pda/pickup");
+
+const jwtWithClaims = (claims) => {
+  const encode = (value) => btoa(JSON.stringify(value))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(claims)}.signature`;
+};
+
 describe("staff pickup orders", () => {
   let current;
   beforeEach(() => {
     vi.resetAllMocks();
+    cameraScan.value = "ARRIVAL-TOKEN";
     listProducts.mockResolvedValue({ data: { items: [], total: 0 } });
     current = structuredClone(pickupOrder);
     listPickupOrders.mockImplementation(async ({ page, size }) => ({
@@ -85,6 +102,188 @@ describe("staff pickup orders", () => {
     });
   });
   afterEach(cleanup);
+
+  it("opens an awaiting-arrival order from the customer QR and carries the raw token into arrival recording", async () => {
+    const user = userEvent.setup();
+    current = {
+      ...current,
+      paymentMode: "PAY_AT_COUNTER",
+      state: "CASH_PENDING_CONFIRMATION",
+      paymentStatus: "PENDING",
+      preparationPolicy: "ON_ARRIVAL",
+      arrivalStatus: "EXPECTED",
+      actions: {
+        canAllocateLots: false, canStartPreparation: false, canMarkReady: false,
+        canHandover: false, canRecordArrival: true, canConfirmCash: false,
+      },
+    };
+    cameraScan.value = jwtWithClaims({
+      purpose: "ARRIVAL", transactionId: "TX-1", storeId: "STORE-1",
+    });
+    render(pdaShell());
+
+    await user.click(await screen.findByRole("button", { name: "pickup.scanCustomerQr" }));
+
+    expect(await screen.findByRole("dialog", { name: "pickup.orderTitle TX-1" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("pickup.arrivalToken")).toHaveValue(cameraScan.value);
+    expect(getPickupOrder).toHaveBeenCalledWith("TX-1", "STORE-1");
+    await user.click(screen.getByRole("button", { name: "pickup.close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("accepts a customer QR typed into the scan input by a keyboard-wedge scanner", async () => {
+    const user = userEvent.setup();
+    current = {
+      ...current,
+      paymentMode: "PAY_AT_COUNTER",
+      state: "CASH_PENDING_CONFIRMATION",
+      paymentStatus: "PENDING",
+      preparationPolicy: "ON_ARRIVAL",
+      arrivalStatus: "EXPECTED",
+      actions: {
+        canAllocateLots: false, canStartPreparation: false, canMarkReady: false,
+        canHandover: false, canRecordArrival: true, canConfirmCash: false,
+      },
+    };
+    const token = jwtWithClaims({
+      purpose: "ARRIVAL", transactionId: "TX-1", storeId: "STORE-1",
+    });
+    render(pdaShell());
+
+    await user.type(await screen.findByLabelText("pickup.referenceSearch"), token);
+    await user.click(screen.getByRole("button", { name: "pickup.find" }));
+
+    expect(await screen.findByRole("dialog", { name: "pickup.orderTitle TX-1" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("pickup.arrivalToken")).toHaveValue(token);
+    expect(getPickupOrder).toHaveBeenCalledWith("TX-1", "STORE-1");
+    expect(listPickupOrders).not.toHaveBeenCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", page: 0, size: 100,
+    });
+  });
+
+  it("rejects a malformed QR typed into the scan input without searching orders", async () => {
+    const user = userEvent.setup();
+    render(pdaShell());
+    await screen.findByRole("button", { name: "pickup.openOrder TX-1" });
+
+    await user.type(screen.getByLabelText("pickup.referenceSearch"), "bad.token.value");
+    await user.click(screen.getByRole("button", { name: "pickup.find" }));
+
+    expect(await screen.findByText("pickup.invalidScannedToken")).toBeInTheDocument();
+    expect(getPickupOrder).not.toHaveBeenCalled();
+    expect(listPickupOrders).not.toHaveBeenCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", page: 0, size: 100,
+    });
+  });
+
+  it("opens a collection order from the customer QR and carries the token into verification", async () => {
+    const user = userEvent.setup();
+    current.preparationStatus = "READY";
+    current.actions = {
+      canAllocateLots: false, canStartPreparation: false, canMarkReady: false, canHandover: true,
+    };
+    cameraScan.value = jwtWithClaims({
+      purpose: "COLLECTION_HANDOVER", transactionId: "TX-1",
+    });
+    render(pdaShell());
+
+    await user.click(await screen.findByRole("button", { name: "pickup.scanCustomerQr" }));
+    await user.click(await screen.findByRole("button", { name: "pickup.verify" }));
+
+    expect(verifyPickupCollection).toHaveBeenCalledWith("TX-1", "STORE-1", cameraScan.value);
+  });
+
+  it("opens the payment app only when the backend allows e-payment confirmation", async () => {
+    const user = userEvent.setup();
+    current = {
+      ...current,
+      paymentMode: "PAY_AT_COUNTER",
+      state: "CASH_PENDING_CONFIRMATION",
+      paymentStatus: "PENDING",
+      preparationPolicy: "ON_ARRIVAL",
+      arrivalStatus: "ARRIVED",
+      actions: {
+        canAllocateLots: false, canStartPreparation: false, canMarkReady: false,
+        canHandover: false, canRecordArrival: false, canConfirmCash: false,
+        canConfirmEPayment: true,
+      },
+    };
+    render(shell());
+
+    await user.click(await screen.findByRole("button", { name: "pickup.openOrder TX-1" }));
+    await user.click(await screen.findByRole("button", { name: "pickup.openPaymentApp" }));
+
+    expect(startPdaPayment).toHaveBeenCalledWith(expect.objectContaining({
+      transactionId: "TX-1",
+      storeId: "STORE-1",
+      amount: "18.00",
+      currency: "MYR",
+    }));
+  });
+
+  it("rejects malformed and wrong-store QR navigation hints without opening an order", async () => {
+    const user = userEvent.setup();
+    render(pdaShell());
+    await screen.findByRole("button", { name: "pickup.openOrder TX-1" });
+
+    cameraScan.value = "not-a-token";
+    await user.click(screen.getByRole("button", { name: "pickup.scanCustomerQr" }));
+    expect(await screen.findByText("pickup.invalidScannedToken")).toBeInTheDocument();
+    expect(getPickupOrder).not.toHaveBeenCalled();
+
+    cameraScan.value = jwtWithClaims({
+      purpose: "ARRIVAL", transactionId: "TX-1", storeId: "STORE-2",
+    });
+    await user.click(screen.getByRole("button", { name: "pickup.scanCustomerQr" }));
+    expect(await screen.findByText("pickup.scanWrongStore")).toBeInTheDocument();
+    expect(getPickupOrder).not.toHaveBeenCalled();
+  });
+
+  it("finds an order by short reference across existing paginated queue responses", async () => {
+    const user = userEvent.setup();
+    current.transactionId = "TX-1001";
+    const firstSearchPage = Array.from({ length: 100 }, (_, index) => ({
+      ...current,
+      transactionId: `TX-${2000 + index}`,
+    }));
+    listPickupOrders.mockImplementation(async ({ page, size }) => ({
+      data: {
+        items: size === 100 && page === 0 ? firstSearchPage : [current],
+        page,
+        size,
+        total: size === 100 ? 101 : 1,
+      },
+    }));
+    render(pdaShell());
+    await screen.findByRole("button", { name: "pickup.openOrder TX-1001" });
+
+    await user.type(screen.getByLabelText("pickup.referenceSearch"), "#1001");
+    await user.click(screen.getByRole("button", { name: "pickup.find" }));
+
+    await waitFor(() => expect(listPickupOrders).toHaveBeenCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", page: 0, size: 100,
+    }));
+    await waitFor(() => expect(getPickupOrder).toHaveBeenCalledWith("TX-1001", "STORE-1"));
+    expect(await screen.findByText("APPLE: 3 EA")).toBeInTheDocument();
+    expect(listPickupOrders).toHaveBeenCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", page: 0, size: 100,
+    });
+    expect(listPickupOrders).toHaveBeenCalledWith({
+      storeId: "STORE-1", queueView: "ACTIVE", page: 1, size: 100,
+    });
+  });
+
+  it("reports a short reference that does not match an order in the current queue", async () => {
+    const user = userEvent.setup();
+    render(pdaShell());
+    await screen.findByRole("button", { name: "pickup.openOrder TX-1" });
+
+    await user.type(screen.getByLabelText("pickup.referenceSearch"), "#NOPE1");
+    await user.click(screen.getByRole("button", { name: "pickup.find" }));
+
+    expect(await screen.findByText("pickup.referenceNotFound")).toBeInTheDocument();
+    expect(getPickupOrder).not.toHaveBeenCalled();
+  });
 
   it("allocates split lots, prepares and hands over the original transaction only after token verification", async () => {
     const user = userEvent.setup();

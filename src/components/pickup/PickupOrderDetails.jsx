@@ -13,12 +13,16 @@ import PickupSchedule from "../customer/PickupSchedule";
 import PickupLifecycleNotice from "../customer/PickupLifecycleNotice";
 import { isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
 import { pickupCommandKey } from "../../helpers/pickup_command_helper";
+import { startPdaPayment } from "../../helpers/pda_payment_helper";
 import { useCameraScanner } from "../../helpers/camera_scanner_helper";
 import PickupReconciliation from "./PickupReconciliation";
 import ProductThumbnail from "../common/ProductThumbnail";
 import useProductPictures from "../../hooks/useProductPictures";
 
-export default function PickupOrderDetails({ order, onChanged, onClose, onBusyChange }) {
+export default function PickupOrderDetails({
+  order, onChanged, onClose, onBusyChange,
+  initialArrivalToken = "", initialCollectionToken = "",
+}) {
   const { t } = useTranslation();
   const { catalogPictures, pictureError } = useProductPictures(order.items);
   const [drafts, setDrafts] = useState(() => Object.fromEntries(
@@ -29,11 +33,11 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
       })) : [{ lotId: "", quantity: "" }],
     ]),
   ));
-  const [qrToken, setQrToken] = useState("");
+  const [qrToken, setQrToken] = useState(initialCollectionToken);
   const [verification, setVerification] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [arrivalToken, setArrivalToken] = useState("");
+  const [arrivalToken, setArrivalToken] = useState(initialArrivalToken);
   const [cashNote, setCashNote] = useState("");
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [customerPresent, setCustomerPresent] = useState(false);
@@ -113,6 +117,16 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
   };
 
   const mutate = (name, payload, execute) => run(() => commit(name, payload, execute));
+
+  const beginElectronicPayment = () => {
+    try {
+      startPdaPayment(order);
+    } catch (paymentError) {
+      setError(paymentError?.message?.startsWith("pdaPayment.")
+        ? t(paymentError.message)
+        : t("pda.payment.startFailed"));
+    }
+  };
 
   const updateDraft = (lineId, index, field, value) => setDrafts((current) => ({
     ...current,
@@ -221,6 +235,16 @@ export default function PickupOrderDetails({ order, onChanged, onClose, onBusyCh
               onClick={() => mutate("arrival", arrivalToken.trim(), (key) =>
                 recordPickupArrival(order.transactionId, order.storeId, arrivalToken.trim(), key))}
             >{t("pickup.recordArrival")}</Button>
+          </Box>
+        )}
+        {order.actions.canConfirmEPayment && (
+          <Box sx={{ my: 2 }}>
+            <Alert severity="info" sx={{ mb: 1 }}>
+              {t("pickup.receiveEPayment", { amount: `${order.currency} ${order.amount}` })}
+            </Alert>
+            <Button variant="contained" disabled={busy} onClick={beginElectronicPayment} sx={{ minHeight: 44 }}>
+              {t("pickup.openPaymentApp")}
+            </Button>
           </Box>
         )}
         {order.actions.canConfirmCash && (
@@ -362,9 +386,12 @@ PickupOrderDetails.propTypes = {
       canHandover: PropTypes.bool.isRequired,
       canRecordArrival: PropTypes.bool,
       canConfirmCash: PropTypes.bool,
+      canConfirmEPayment: PropTypes.bool,
     }).isRequired,
   }).isRequired,
   onChanged: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
   onBusyChange: PropTypes.func.isRequired,
+  initialArrivalToken: PropTypes.string,
+  initialCollectionToken: PropTypes.string,
 };

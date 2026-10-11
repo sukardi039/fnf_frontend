@@ -3,7 +3,8 @@ import { request } from "./axios_helper";
 import {
   listPickupOrders, getPickupOrder, allocatePickupLots, preparePickupOrder,
   verifyPickupCollection, handoverPickupOrder, issueCustomerCollectionToken,
-  recordPickupArrival, confirmPickupCash, issueCustomerArrivalToken,
+  recordPickupArrival, confirmPickupCash, confirmPickupElectronicPayment,
+  issueCustomerArrivalToken,
   reconcilePickupOrder,
 } from "./pickup_helper";
 
@@ -65,6 +66,18 @@ describe("pickup API helpers", () => {
       "POST", "/api/transactions/TX-1/collection-token", null,
       { skipAuthRedirect: true, skipBackendErrorDialog: true, authScope: "customer" },
     );
+  });
+
+  it("forwards an e-payment confirmation against a scoped existing order", () => {
+    const confirmation = {
+      provider: "mockpay-pda", providerRef: "receipt-1", paidAmount: "18.00",
+      currency: "MYR", paidAt: "2026-10-11T10:00:00Z", proof: "signed-receipt",
+    };
+    confirmPickupElectronicPayment("TX/1", "Store 1", confirmation, "KEY-E");
+    expect(request).toHaveBeenCalledWith("POST",
+      "/api/pickup-orders/TX%2F1/e-payment-confirmation?storeId=Store+1",
+      confirmation,
+      { skipBackendErrorDialog: true, headers: { "Idempotency-Key": "KEY-E" } });
   });
 
   it("records arrival and cash against a scoped existing order, with separate arrival issuance", () => {

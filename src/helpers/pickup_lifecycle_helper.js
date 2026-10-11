@@ -12,6 +12,13 @@ export const canContinuePickupPayment = (order) =>
   !order.fulfilmentHoldReason && order.paymentResolutionStatus !== "CHECKING" &&
   order.paymentStatus !== "SUCCESS";
 
+export const isPackingDue = (order, now = Date.now()) =>
+  order?.paymentStatus === "SUCCESS" &&
+  ["NOT_STARTED", "PREPARING"].includes(order?.preparationStatus) &&
+  !terminal.has(order?.state) &&
+  Number.isFinite(Date.parse(order?.pickupSlotStart)) &&
+  Date.parse(order.pickupSlotStart) - now <= 30 * 60_000;
+
 export const isPaidPickupOverdue = (order, now = Date.now()) =>
   order.channel === "MOBILE_ORDER" && order.paymentStatus === "SUCCESS" &&
   !terminal.has(order.state) &&

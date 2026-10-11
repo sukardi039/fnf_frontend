@@ -36,6 +36,9 @@ export const recordPickupArrival = (transactionId, storeId, qrToken, key) =>
 export const confirmPickupCash = (transactionId, storeId, confirmationNote, key) =>
   mutate(`${orderPath(transactionId)}/confirm-cash${scope(storeId)}`, { confirmationNote }, key);
 
+export const confirmPickupElectronicPayment = (transactionId, storeId, confirmation, key) =>
+  mutate(`${orderPath(transactionId)}/e-payment-confirmation${scope(storeId)}`, confirmation, key);
+
 export const issueCustomerArrivalToken = (transactionId) =>
   request("POST", `/api/transactions/${encodeURIComponent(transactionId)}/arrival-token`, null, {
     skipAuthRedirect: true,

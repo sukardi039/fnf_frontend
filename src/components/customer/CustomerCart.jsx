@@ -18,6 +18,7 @@ import PickupSchedule from "./PickupSchedule";
 import PickupLifecycleNotice from "./PickupLifecycleNotice";
 import { canContinuePickupPayment, isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
 import { formatPickupSlotWithDate, getPickupSlots } from "../../helpers/pickup_time_helper";
+import { getParam } from "../../helpers/store_api";
 import { useStoreLocation } from "../../context/storeLocationContext";
 import { getCustomerInfo } from "../../helpers/customer_helper";
 import { clearCheckoutAttempt, readCheckoutAttempt, saveCheckoutAttempt } from "../../helpers/customer_checkout_recovery";
@@ -28,6 +29,8 @@ import {
 } from "../../helpers/customer_cart_helper";
 
 const CHANNEL = "MOBILE_ORDER";
+const DEFAULT_PICKUP_LEAD_MINUTES = 90;
+const PICKUP_LEAD_MINUTES_PARAM = "pickupLeadTimeMinutes";
 
 export default function CustomerCart({
   items,
@@ -50,26 +53,52 @@ export default function CustomerCart({
     ? t(recovery.error.startsWith("customer.") ? recovery.error : "customer.cart.recoveryInvalid") : "");
   const [transaction, setTransaction] = useState(null);
   const [paymentMode, setPaymentMode] = useState(recovery.attempt?.paymentMode || "PAY_AT_COUNTER");
+  const [activeAttempt, setActiveAttempt] = useState(recovery.attempt);
   const [attemptStarted, setAttemptStarted] = useState(Boolean(recovery.attempt));
   const attempt = useRef(recovery.attempt);
   const submitting = useRef(false);
   const [now, setNow] = useState(() => new Date());
+  const [pickupLeadMinutes, setPickupLeadMinutes] = useState(DEFAULT_PICKUP_LEAD_MINUTES);
   const [pickupChoice, setPickupChoice] = useState("");
   const [lockedSlot, setLockedSlot] = useState(recovery.attempt?.pickupSlot || null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    let active = true;
+    getParam(PICKUP_LEAD_MINUTES_PARAM)
+      .then(({ data }) => {
+        const configured = Number(data?.value_string);
+        if (!Number.isSafeInteger(configured) || configured < 0) {
+          throw new Error("Invalid pickup lead time");
+        }
+        if (active) setPickupLeadMinutes(configured);
+      })
+      .catch(() => {
+        if (active) setPickupLeadMinutes(DEFAULT_PICKUP_LEAD_MINUTES);
+      });
+    return () => { active = false; };
+  }, []);
   let slots = [];
   let scheduleError = false;
   try {
-    slots = getPickupSlots(now, store?.timezone, store?.businessHours);
+    slots = getPickupSlots(now, store?.timezone, store?.businessHours, pickupLeadMinutes);
   } catch {
     scheduleError = true;
   }
   const selectedSlot = slots.find((slot) => slot.pickupSlotStart === pickupChoice) ||
     (!pickupChoice ? slots[0] : null);
   const displayedSlot = lockedSlot || selectedSlot;
+
+  const discardAttempt = () => {
+    attempt.current = null;
+    setActiveAttempt(null);
+    setAttemptStarted(false);
+    setLockedSlot(null);
+    setPickupChoice("");
+    clearCheckoutAttempt(recovery.customerId);
+  };
 
   const handleCheckout = async () => {
     if (submitting.current || transaction) return;
@@ -82,11 +111,14 @@ export default function CustomerCart({
     setLoading(true);
     setError("");
     setTransaction(null);
+    let serverCallInFlight = false;
     try {
       if (!attempt.current) {
-        const pickupSlot = getPickupSlots(new Date(), store?.timezone, store?.businessHours)
+        const pickupSlot = getPickupSlots(new Date(), store?.timezone, store?.businessHours, pickupLeadMinutes)
           .find((slot) => slot.pickupSlotStart === selectedSlot?.pickupSlotStart);
-        if (!pickupSlot) throw new Error(t("customer.cart.pickupSlotUnavailable"));
+        if (!pickupSlot) {
+          throw new Error(t("customer.cart.pickupSlotUnavailable", { leadMinutes: pickupLeadMinutes }));
+        }
         attempt.current = {
           pickupSlot,
           storeId: storeId.trim(), paymentMode,
@@ -95,21 +127,25 @@ export default function CustomerCart({
           itemKeys: items.map(() => crypto.randomUUID()), cartId: null, added: 0, quoteId: null,
         };
         setLockedSlot(pickupSlot);
+        setActiveAttempt(attempt.current);
         setAttemptStarted(true);
       }
       const current = attempt.current;
       if (current.storeId !== storeId.trim()) throw new Error(t("customer.cart.storeChanged"));
       saveCheckoutAttempt(recovery.customerId, current);
       if (!current.cartId) {
+        serverCallInFlight = true;
         const { data } = await createCustomerCart({
           storeId: current.storeId, channel: CHANNEL, customerId: null,
         }, current.createKey);
         if (!data?.cartId) throw new Error(t("customer.cart.checkoutFailed"));
         current.cartId = data.cartId;
+        serverCallInFlight = false;
         saveCheckoutAttempt(recovery.customerId, current);
       }
       while (current.added < current.items.length) {
         const item = current.items[current.added];
+        serverCallInFlight = true;
         const itemResponse = await addCustomerCartItem(current.cartId, {
           skuId: item.skuId,
           quantity: Number(item.quantity),
@@ -117,8 +153,10 @@ export default function CustomerCart({
         if (!itemResponse.data?.quoteId) throw new Error(t("customer.cart.noQuote"));
         current.quoteId = itemResponse.data.quoteId;
         current.added += 1;
+        serverCallInFlight = false;
         saveCheckoutAttempt(recovery.customerId, current);
       }
+      serverCallInFlight = true;
       const checkoutResponse = await checkoutCustomerCart({
         cartId: current.cartId,
         quoteId: current.quoteId,
@@ -129,6 +167,7 @@ export default function CustomerCart({
       if (!checkoutResponse.data?.transactionId) {
         throw new Error(t("customer.cart.checkoutNoTransaction"));
       }
+      serverCallInFlight = false;
       setTransaction({ ...checkoutResponse.data, channel: CHANNEL, paymentMode: current.paymentMode });
       if (Date.parse(checkoutResponse.data.pickupSlotStart) !== Date.parse(current.pickupSlot.pickupSlotStart) ||
           Date.parse(checkoutResponse.data.pickupSlotEnd) !== Date.parse(current.pickupSlot.pickupSlotEnd) ||
@@ -137,8 +176,11 @@ export default function CustomerCart({
         setError(t("customer.cart.pickupScheduleUnconfirmed"));
       }
       onClear?.();
-      clearCheckoutAttempt(recovery.customerId);
+      discardAttempt();
     } catch (err) {
+      const status = Number(err?.response?.status);
+      const definiteRejection = !serverCallInFlight || (status >= 400 && status < 500);
+      if (definiteRejection) discardAttempt();
       setError(
         err?.response?.data?.message || err?.message || t("customer.cart.checkoutFailed"),
       );
@@ -164,7 +206,7 @@ export default function CustomerCart({
           {error}
         </Alert>
       )}
-      {recovery.attempt && !transaction && (
+      {activeAttempt && !transaction && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t("customer.cart.recoveredAttempt")}
           <Link component={RouterLink} to="/m/orders" sx={{ ml: 1 }}>{t("collection.viewOrders")}</Link>
@@ -238,11 +280,16 @@ export default function CustomerCart({
                 ))}
                 </Box>
               </Box>
-              <Typography sx={{ mt: 1 }}>{t("customer.cart.pickupRules", { timezone: store?.timezone })}</Typography>
+              <Typography sx={{ mt: 1 }}>{t("customer.cart.pickupRules", {
+                timezone: store?.timezone,
+                leadMinutes: pickupLeadMinutes,
+              })}</Typography>
               {displayedSlot && <PickupSchedule order={displayedSlot} />}
               {!attemptStarted && (!slots.length || !selectedSlot) && (
                 <Alert severity="warning" sx={{ mt: 1 }}>
-                  {t(slots.length ? "customer.cart.pickupSlotUnavailable" : "customer.cart.noPickupSlots")}
+                  {slots.length
+                    ? t("customer.cart.pickupSlotUnavailable", { leadMinutes: pickupLeadMinutes })
+                    : t("customer.cart.noPickupSlots")}
                 </Alert>
               )}
             </>
@@ -277,7 +324,7 @@ export default function CustomerCart({
       </Card>
 
       <CheckoutCartItems
-        items={recovery.attempt?.items || items}
+        items={activeAttempt?.items || items}
         onRemove={attemptStarted ? undefined : onRemove}
         onUpdateQuantity={attemptStarted ? undefined : onUpdateQuantity}
         editingDisabled={attemptStarted}

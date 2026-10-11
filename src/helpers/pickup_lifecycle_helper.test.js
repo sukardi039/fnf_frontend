@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canContinuePickupPayment, hasValidPickupLifecycle, isPaidPickupOverdue, isPickupBlocked } from "./pickup_lifecycle_helper";
+import {
+  canContinuePickupPayment,
+  hasValidPickupLifecycle,
+  isPackingDue,
+  isPaidPickupOverdue,
+  isPickupBlocked,
+} from "./pickup_lifecycle_helper";
 
 const paid = { channel: "MOBILE_ORDER", state: "PAYMENT_SUCCESS", paymentStatus: "SUCCESS",
   pickupExpiresAt: "2026-10-10T04:00:00Z" };
@@ -22,6 +28,15 @@ describe("pickup lifecycle", () => {
   });
   it.each(["HANDED_OVER", "EXPIRED", "CANCELLED", "REFUNDED"])("does not relabel %s as active overdue", (state) => {
     expect(isPaidPickupOverdue({ ...paid, state }, deadline)).toBe(false);
+  });
+  it("marks paid unready orders as packing due 30 minutes before the pickup slot", () => {
+    const slotStart = Date.parse("2026-10-10T04:00:00Z");
+    const order = { ...paid, preparationStatus: "NOT_STARTED", pickupSlotStart: "2026-10-10T04:00:00Z" };
+    expect(isPackingDue(order, slotStart - 31 * 60_000)).toBe(false);
+    expect(isPackingDue(order, slotStart - 30 * 60_000)).toBe(true);
+    expect(isPackingDue({ ...order, preparationStatus: "PREPARING" }, slotStart)).toBe(true);
+    expect(isPackingDue({ ...order, preparationStatus: "READY" }, slotStart)).toBe(false);
+    expect(isPackingDue({ ...order, paymentStatus: "PENDING" }, slotStart)).toBe(false);
   });
   it("prefers authoritative timing metadata to the browser clock", () => {
     expect(isPaidPickupOverdue({ ...paid, pickupTimingStatus: "ON_TIME" }, deadline + 1)).toBe(false);

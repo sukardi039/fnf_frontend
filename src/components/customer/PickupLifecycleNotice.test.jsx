@@ -18,6 +18,16 @@ describe("pickup lifecycle notices", () => {
     act(() => vi.advanceTimersByTime(90_000));
     expect(screen.getByRole("alert")).toHaveTextContent("pickup.overdueMinutes 1");
   });
+  it("shows packing due for a paid unready order within 30 minutes of pickup", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-10T03:30:00Z"));
+    render(<PickupLifecycleNotice order={{
+      channel: "MOBILE_ORDER", state: "PAYMENT_SUCCESS", paymentStatus: "SUCCESS",
+      preparationStatus: "NOT_STARTED", pickupSlotStart: "2026-10-10T04:00:00Z",
+      pickupExpiresAt: "2026-10-10T05:00:00Z",
+    }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("pickup.packingDue");
+  });
   it("shows the backend payment window and keeps checking after it ends", () => {
     render(<PickupLifecycleNotice order={{ state: "PAYMENT_PENDING", paymentResolutionStatus: "CHECKING",
       paymentResolutionDeadline: "2026-10-09T04:00:00Z" }} />);

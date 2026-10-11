@@ -25,6 +25,15 @@ describe("same-day pickup slots in the store timezone", () => {
     }
   });
 
+  it("uses the configured lead time when generating slots", () => {
+    const slots = getPickupSlots(
+      new Date("2026-10-09T07:48:55Z"), "Asia/Singapore", hours, 10,
+    );
+    expect(formatPickupSlot(slots[0])).toBe("16:00 - 16:30");
+    expect(Date.parse(slots[0].pickupSlotStart) - Date.parse("2026-10-09T07:48:55Z"))
+      .toBeGreaterThanOrEqual(10 * 60 * 1000);
+  });
+
   it("includes exactly 90 minutes but excludes even one millisecond less", () => {
     expect(getPickupSlots(new Date("2026-10-09T11:30:00Z"), "Asia/Singapore", hours)).toHaveLength(1);
     expect(getPickupSlots(new Date("2026-10-09T11:30:00.001Z"), "Asia/Singapore", hours)).toEqual([]);

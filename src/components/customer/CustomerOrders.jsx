@@ -3,14 +3,18 @@ import PropTypes from "prop-types";
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Tab, Tabs, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { LoadingState, EmptyState } from "../common";
-import { isCurrentCustomerOrder, listAllCustomerTransactions } from "../../helpers/customer_cart_helper";
+import {
+  continueCustomerPayment,
+  isCurrentCustomerOrder,
+  listAllCustomerTransactions,
+} from "../../helpers/customer_cart_helper";
 import { getCustomerInfo } from "../../helpers/customer_helper";
 import CollectionToken from "./CollectionToken";
 import PickupSchedule from "./PickupSchedule";
 import PickupLifecycleNotice from "./PickupLifecycleNotice";
 import ProductThumbnail from "../common/ProductThumbnail";
 import useProductPictures from "../../hooks/useProductPictures";
-import { isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
+import { canContinuePickupPayment, isPickupBlocked } from "../../helpers/pickup_lifecycle_helper";
 
 const STATUS_COLORS = {
   PAYMENT_PENDING: "warning",
@@ -31,6 +35,8 @@ export default function CustomerOrders({ showAbortedOrders = false }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const [paymentBusyId, setPaymentBusyId] = useState("");
   const [revision, setRevision] = useState(0);
   const [page, setPage] = useState(0);
   const [view, setView] = useState("CURRENT");
@@ -75,6 +81,38 @@ export default function CustomerOrders({ showAbortedOrders = false }) {
     return () => { active = false; };
   }, [t, customer?.customerId, revision]);
 
+  const continuePayment = async (order) => {
+    if (paymentBusyId) return;
+    setPaymentBusyId(order.transactionId);
+    setPaymentError("");
+    try {
+      const { data } = await continueCustomerPayment(order.transactionId);
+      if (data?.transactionId !== order.transactionId) {
+        throw new Error("customer.orders.paymentContinuationInvalid");
+      }
+      if (data.status === "ALREADY_PAID") {
+        setRevision((value) => value + 1);
+        return;
+      }
+      if (typeof data.redirectUrl !== "string" || !data.redirectUrl.trim()) {
+        throw new Error("customer.orders.paymentContinuationUnavailable");
+      }
+      const redirect = new URL(data.redirectUrl, window.location.origin);
+      if (data.status !== "AVAILABLE" || !["http:", "https:"].includes(redirect.protocol) ||
+          !Number.isFinite(Date.parse(data.expiresAt)) || Date.parse(data.expiresAt) <= Date.now()) {
+        throw new Error("customer.orders.paymentContinuationUnavailable");
+      }
+      window.open(redirect.toString(), "_self", "noopener");
+    } catch (paymentFailure) {
+      setPaymentError(
+        paymentFailure?.response?.data?.message || paymentFailure?.message ||
+          t("customer.orders.paymentContinuationFailed"),
+      );
+    } finally {
+      setPaymentBusyId("");
+    }
+  };
+
   return (
     <Box sx={{ px: 2, pb: 2, maxWidth: 640, mx: "auto", minWidth: 0 }}>
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 1, mb: 1 }}>
@@ -109,6 +147,7 @@ export default function CustomerOrders({ showAbortedOrders = false }) {
           ? "profile-aborted-orders-heading"
           : view === "CURRENT" ? "orders-current-tab" : "orders-past-tab"}
       >
+        {paymentError && <Alert severity="error" sx={{ mb: 2 }}>{paymentError}</Alert>}
         {!loading && !error && pictureError && (
           <Alert severity="warning" sx={{ mb: 2 }}>{t("customer.cart.picturesFailed")}</Alert>
         )}
@@ -127,6 +166,8 @@ export default function CustomerOrders({ showAbortedOrders = false }) {
           <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
             {pageItems.map((item) => {
               const isActive = isCurrentCustomerOrder(item);
+              const paymentContinuation = item.channel === "MOBILE_ORDER" &&
+                item.paymentMode === "E_PAYMENT" && canContinuePickupPayment(item);
               const cashArrival = item.channel === "MOBILE_ORDER" && item.paymentMode === "PAY_AT_COUNTER" &&
                 item.state === "CASH_PENDING_CONFIRMATION" && !isPickupBlocked(item);
               const collectionReady = item.channel === "MOBILE_ORDER" && item.preparationStatus === "READY" &&
@@ -195,6 +236,22 @@ export default function CustomerOrders({ showAbortedOrders = false }) {
                       )}
                       {item.preparationStatus && !["EXPIRED", "CANCELLED", "REFUNDED", "HANDED_OVER"].includes(item.state) && (
                         <Typography variant="body2" color="text.secondary">{t(`pickup.status.${item.preparationStatus}`)}</Typography>
+                      )}
+                      {paymentContinuation && (
+                        <>
+                          <Divider />
+                          <Typography variant="body2">{t("customer.orders.paymentPendingInstructions")}</Typography>
+                          <Button
+                            variant="contained"
+                            disabled={paymentBusyId === item.transactionId}
+                            onClick={() => continuePayment(item)}
+                            sx={{ minHeight: 44 }}
+                          >
+                            {t(paymentBusyId === item.transactionId
+                              ? "customer.orders.openingPayment"
+                              : "customer.orders.continuePayment")}
+                          </Button>
+                        </>
                       )}
                       {cashArrival && (
                         <>

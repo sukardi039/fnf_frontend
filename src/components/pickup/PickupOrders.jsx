@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
-  Alert, Box, Button, Card, CardContent, MenuItem, Stack, TextField, Typography,
+  Alert, Box, Button, Card, CardContent, Dialog, DialogContent, IconButton,
+  InputAdornment, MenuItem, Stack, TextField, Typography,
 } from "@mui/material";
+import { QrCodeScanner as QrCodeScannerIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useStoreLocation } from "../../context/storeLocationContext";
 import { listPickupOrders, getPickupOrder } from "../../helpers/pickup_helper";
 import PickupOrderDetails from "./PickupOrderDetails";
 import PickupSchedule from "../customer/PickupSchedule";
+import { useCameraScanner } from "../../helpers/camera_scanner_helper";
+import {
+  matchesPickupReference,
+  normalizePickupReference,
+  readPickupTokenNavigation,
+} from "../../helpers/pickup_scan_helper";
 import PickupLifecycleNotice from "../customer/PickupLifecycleNotice";
 import { isLegacyPickupOrder, isPickupSummary, matchesPickupQueueView, pickupErrorMessage, validatePickupOrder } from "./pickupUtils";
 
@@ -19,6 +27,7 @@ export default function PickupOrders() {
 
 function PickupQueue({ storeId }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState("");
   const [queueView, setQueueView] = useState("ACTIVE");
@@ -28,6 +37,12 @@ function PickupQueue({ storeId }) {
   const [selectedId, setSelectedId] = useState(() => searchParams.get("transactionId") || "");
   const [detailResult, setDetailResult] = useState(null);
   const [mutationBusy, setMutationBusy] = useState(false);
+  const [referenceInput, setReferenceInput] = useState("");
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState("");
+  const [scannedAction, setScannedAction] = useState(null);
+  const [detailPresentation, setDetailPresentation] = useState("inline");
+  const isPda = location.pathname.startsWith("/pda/");
   const size = 20;
   const queueKey = JSON.stringify({ storeId, queueView, filter, page, revision });
   const detailKey = JSON.stringify({ storeId, selectedId, revision });
@@ -35,8 +50,39 @@ function PickupQueue({ storeId }) {
   const order = detailResult?.key === detailKey && selectedId ? detailResult.data : null;
   const loading = Boolean(storeId && queueResult?.key !== queueKey);
   const detailLoading = Boolean(storeId && selectedId && detailResult?.key !== detailKey);
-  const error = (queueResult?.key === queueKey && queueResult.error) ||
+  const error = lookupError || (queueResult?.key === queueKey && queueResult.error) ||
     (selectedId && detailResult?.key === detailKey && detailResult.error);
+
+  const openOrder = (transactionId, action = null) => {
+    setLookupError("");
+    setScannedAction(action);
+    setDetailPresentation(action ? "dialog" : "inline");
+    setSearchParams({ transactionId }, { replace: true });
+    setDetailResult(null);
+    setSelectedId(transactionId);
+    if (selectedId === transactionId) setRevision((value) => value + 1);
+  };
+
+  const handleQueueScan = (token) => {
+    try {
+      const navigation = readPickupTokenNavigation(token);
+      if (navigation.purpose === "ARRIVAL" && navigation.storeId !== storeId) {
+        throw new Error("pickup.scanWrongStore");
+      }
+      openOrder(navigation.transactionId, { token, purpose: navigation.purpose });
+    } catch (scanError) {
+      setLookupError(pickupErrorMessage(scanError, t));
+    }
+  };
+
+  const {
+    openScanner: openQueueScanner,
+    scannerOverlay: queueScannerOverlay,
+  } = useCameraScanner({
+    containerId: "pickup-queue-camera",
+    normalize: false,
+    onScan: handleQueueScan,
+  });
 
   useEffect(() => {
     let active = true;
@@ -80,12 +126,125 @@ function PickupQueue({ storeId }) {
     setRevision((value) => value + 1);
   };
 
+  const findByReference = async (event) => {
+    event.preventDefault();
+    if (lookupBusy) return;
+    setLookupBusy(true);
+    setLookupError("");
+    try {
+      const scannedInput = referenceInput.trim();
+      try {
+        const navigation = readPickupTokenNavigation(scannedInput);
+        if (navigation.purpose === "ARRIVAL" && navigation.storeId !== storeId) {
+          throw new Error("pickup.scanWrongStore");
+        }
+        openOrder(navigation.transactionId, { token: scannedInput, purpose: navigation.purpose });
+        setReferenceInput("");
+        return;
+      } catch (scanFailure) {
+        if (scannedInput.includes(".")) throw scanFailure;
+      }
+
+      const reference = normalizePickupReference(scannedInput);
+      const searchSize = 100;
+      let searched = 0;
+      for (let searchPage = 0; ; searchPage += 1) {
+        const { data } = await listPickupOrders({
+          storeId, queueView, page: searchPage, size: searchSize,
+        });
+        if (!Array.isArray(data?.items) || !Number.isInteger(data.total) ||
+            data.total < 0 || data.page !== searchPage || data.size !== searchSize ||
+            !data.items.every((item) => isPickupSummary(item, storeId) &&
+              matchesPickupQueueView(item, queueView))) {
+          throw new Error("pickup.invalidResponse");
+        }
+        const matches = data.items.filter((item) =>
+          matchesPickupReference(item.transactionId, reference));
+        if (matches.length > 1) throw new Error("pickup.referenceAmbiguous");
+        if (matches.length === 1) {
+          openOrder(matches[0].transactionId);
+          return;
+        }
+        searched += data.items.length;
+        if (searched >= data.total) break;
+        if (data.items.length === 0) throw new Error("pickup.invalidResponse");
+      }
+      throw new Error("pickup.referenceNotFound");
+    } catch (lookupFailure) {
+      setLookupError(pickupErrorMessage(lookupFailure, t));
+    } finally {
+      setLookupBusy(false);
+    }
+  };
+
+  const closeOrder = () => {
+    setSelectedId("");
+    setScannedAction(null);
+    setDetailPresentation("inline");
+    setSearchParams({}, { replace: true });
+  };
+
+  const orderDetails = order && (
+    <PickupOrderDetails
+      key={`${order.transactionId}-${revision}`}
+      order={order}
+      initialArrivalToken={scannedAction?.purpose === "ARRIVAL" ? scannedAction.token : ""}
+      initialCollectionToken={scannedAction?.purpose === "COLLECTION" ? scannedAction.token : ""}
+      onChanged={() => {
+        setScannedAction(null);
+        refresh();
+      }}
+      onBusyChange={setMutationBusy}
+      onClose={closeOrder}
+    />
+  );
+
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h5" component="h1">{t("pickup.title")}</Typography>
       <Typography color="text.secondary" sx={{ mb: 2 }}>{t("pickup.subtitle")}</Typography>
       {!storeId ? <Alert severity="warning">{t("pickup.storeRequired")}</Alert> : (
         <>
+          {isPda && (
+            <Box
+              component="form"
+              onSubmit={findByReference}
+              sx={{ display: "flex", gap: 1, flexGrow: 1, minWidth: 0, mb: 2 }}
+            >
+              <TextField
+                size="small"
+                label={t("pickup.referenceSearch")}
+                placeholder={t("pickup.scanOrReference")}
+                value={referenceInput}
+                onChange={(event) => setReferenceInput(event.target.value)}
+                disabled={lookupBusy || mutationBusy}
+                inputProps={{ maxLength: 2048 }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={openQueueScanner}
+                        disabled={lookupBusy || mutationBusy}
+                        aria-label={t("pickup.scanCustomerQr")}
+                        edge="end"
+                      >
+                        <QrCodeScannerIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                fullWidth
+              />
+              <Button
+                type="submit"
+                variant="outlined"
+                disabled={lookupBusy || mutationBusy}
+                sx={{ minHeight: 40, flexShrink: 0 }}
+              >
+                {t(lookupBusy ? "pickup.finding" : "pickup.find")}
+              </Button>
+            </Box>
+          )}
           <Box role="group" aria-label={t("pickup.queueView")} sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
             {["ACTIVE", "RECONCILIATION"].map((view) => (
               <Button key={view} variant={queueView === view ? "contained" : "outlined"}
@@ -96,6 +255,9 @@ function PickupQueue({ storeId }) {
                   setFilter("");
                   setPage(0);
                   setSelectedId("");
+                  setScannedAction(null);
+                  setDetailPresentation("inline");
+                  setLookupError("");
                   setSearchParams({}, { replace: true });
                 }}>{t(view === "ACTIVE" ? "pickup.activePickup" : "pickup.reconciliation")}</Button>
             ))}
@@ -150,12 +312,7 @@ function PickupQueue({ storeId }) {
                   )}
                   <Typography>{item.currency} {item.amount}</Typography>
                   <Typography>{new Date(item.createdAt).toLocaleString()}</Typography>
-                  <Button onClick={() => {
-                    setSearchParams({ transactionId: item.transactionId }, { replace: true });
-                    setDetailResult(null);
-                    setSelectedId(item.transactionId);
-                    if (selectedId === item.transactionId) setRevision((value) => value + 1);
-                  }} disabled={detailLoading || mutationBusy}>
+                  <Button onClick={() => openOrder(item.transactionId)} disabled={detailLoading || mutationBusy}>
                     {t("pickup.openOrder", { transactionId: item.transactionId })}
                   </Button>
                 </CardContent>
@@ -170,17 +327,26 @@ function PickupQueue({ storeId }) {
             </Stack>
           )}
           {detailLoading && <Typography role="status">{t("pickup.loadingDetails")}</Typography>}
-          {order && (
-            <PickupOrderDetails
-              key={`${order.transactionId}-${revision}`}
-              order={order} onChanged={refresh}
-              onBusyChange={setMutationBusy}
+          {order && detailPresentation === "dialog" ? (
+            <Dialog
+              open
+              fullWidth
+              maxWidth="md"
+              scroll="paper"
               onClose={() => {
-                setSelectedId("");
-                setSearchParams({}, { replace: true });
+                if (!mutationBusy) closeOrder();
               }}
-            />
-          )}
+              disableEscapeKeyDown={mutationBusy}
+              slotProps={{
+                paper: { "aria-label": t("pickup.orderTitle", { transactionId: order.transactionId }) },
+              }}
+            >
+              <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
+                {orderDetails}
+              </DialogContent>
+            </Dialog>
+          ) : orderDetails}
+          {queueScannerOverlay}
         </>
       )}
     </Box>

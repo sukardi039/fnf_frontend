@@ -21,11 +21,14 @@ const instantFor = (year, month, day, minute, timeZone) => {
   throw new Error("Invalid pickup time in store timezone");
 };
 
-export const getPickupSlots = (now, timeZone, businessHours) => {
+export const getPickupSlots = (now, timeZone, businessHours, leadMinutes = 90) => {
   if (!timeZone) throw new Error("Store timezone is required");
+  if (!Number.isSafeInteger(leadMinutes) || leadMinutes < 0) {
+    throw new Error("Pickup lead time must be a non-negative number of minutes");
+  }
   validateBusinessHours(businessHours);
   const today = partsAt(now, timeZone);
-  const earliest = now.getTime() + 90 * 60 * 1000;
+  const earliest = now.getTime() + leadMinutes * 60 * 1000;
   const date = new Date(Date.UTC(today.year, today.month - 1, today.day));
   const intervals = [-1, 0].flatMap((offset) => {
     const day = new Date(date.getTime() + offset * 24 * 60 * 60 * 1000);

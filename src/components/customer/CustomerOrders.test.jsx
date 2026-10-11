@@ -1,16 +1,21 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CustomerOrders from "./CustomerOrders";
-import { listAllCustomerTransactions } from "../../helpers/customer_cart_helper";
+import {
+  continueCustomerPayment,
+  listAllCustomerTransactions,
+} from "../../helpers/customer_cart_helper";
 import { listProducts } from "../catalog/productApi";
 
 vi.mock("../catalog/productApi", () => ({ listProducts: vi.fn() }));
 
 vi.mock("../../helpers/customer_cart_helper", async (importOriginal) => ({
-  ...await importOriginal(), listAllCustomerTransactions: vi.fn(),
+  ...await importOriginal(),
+  listAllCustomerTransactions: vi.fn(),
+  continueCustomerPayment: vi.fn(),
 }));
 vi.mock("../../helpers/customer_helper", () => ({ getCustomerInfo: () => ({ customerId: "CUSTOMER-1" }) }));
 vi.mock("../../helpers/pickup_helper", () => ({
@@ -124,6 +129,32 @@ describe("customer pickup history", () => {
     expect(screen.getAllByRole("button", { name: "arrival.show" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "collection.show" })).not.toBeInTheDocument();
     expect(screen.getByText("pickup.arrived")).toBeInTheDocument();
+  });
+
+  it("continues the existing electronic payment without creating another order", async () => {
+    listAllCustomerTransactions.mockResolvedValue([{
+      transactionId: "EPAY-1", channel: "MOBILE_ORDER", paymentMode: "E_PAYMENT",
+      state: "PAYMENT_PENDING", paymentStatus: "PENDING", preparationStatus: "NOT_STARTED",
+      currency: "SGD", amount: 12,
+    }]);
+    continueCustomerPayment.mockResolvedValue({
+      data: {
+        transactionId: "EPAY-1", status: "AVAILABLE", paymentStatus: "PENDING",
+        redirectUrl: "https://payments.example/continue/EPAY-1",
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      },
+    });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const user = userEvent.setup();
+    render(<CustomerOrders />);
+
+    await user.click(await screen.findByRole("button", { name: "customer.orders.continuePayment" }));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith(
+      "https://payments.example/continue/EPAY-1", "_self", "noopener",
+    ));
+    expect(continueCustomerPayment).toHaveBeenCalledWith("EPAY-1");
+    open.mockRestore();
   });
 
   it("shows the scheduled deadline and does not describe expired orders as awaiting preparation", async () => {

@@ -9,6 +9,7 @@ Rules
 - Product code: generated format is `<companyPrefix>-<10char-uuid>` using `crypto.randomUUID()` and centralized generator in `src/helpers/itemcode_helper.js`.
 - UI protection: `productCode` inputs must be read-only for create/edit flows; product edit receives canonical `productId`.
 - Endpoints: use `/api/products` for product lookup/list/get-by-id; use `/api/stockviews/product/{productId}` for stock totals by product.
+- Cross-domain changes: investigate the existing API contract first and avoid unnecessary cross-domain changes. When a cross-domain change is unavoidable, frontend-owned and backend-owned changes must be applied by their respective coding platforms.
 
 Enforcement
 

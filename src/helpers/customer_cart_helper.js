@@ -26,6 +26,13 @@ export const checkoutCustomerCart = (data, key = crypto.randomUUID()) =>
     skipBackendErrorDialog: true,
   });
 
+export const continueCustomerPayment = (transactionId) =>
+  request("GET", `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/payment-continuation`, null, {
+    skipAuthRedirect: true,
+    authScope: "customer",
+    skipBackendErrorDialog: true,
+  });
+
 export const listCustomerTransactions = (params = {}) => {
   const query = new URLSearchParams();
   if (params.customerId) query.set("customerId", params.customerId);

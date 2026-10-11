@@ -2,7 +2,12 @@ import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Alert } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { hasValidPickupLifecycle, isPaidPickupOverdue, isPaymentResolving } from "../../helpers/pickup_lifecycle_helper";
+import {
+  hasValidPickupLifecycle,
+  isPackingDue,
+  isPaidPickupOverdue,
+  isPaymentResolving,
+} from "../../helpers/pickup_lifecycle_helper";
 
 export default function PickupLifecycleNotice({ order }) {
   const { t } = useTranslation();
@@ -16,6 +21,7 @@ export default function PickupLifecycleNotice({ order }) {
   const due = Date.parse(order.pickupExpiresAt);
   return (
     <>
+      {isPackingDue(order, now) && <Alert severity="info">{t("pickup.packingDue")}</Alert>}
       {overdue && <Alert severity="warning">
         {t("pickup.overduePaid")}
         {Number.isFinite(due) && t("pickup.overdueMinutes", {

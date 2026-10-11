@@ -9,11 +9,13 @@ import { WEEKDAYS } from "../../helpers/store_hours_helper";
 import {
   createCustomerCart, addCustomerCartItem, checkoutCustomerCart,
 } from "../../helpers/customer_cart_helper";
+import { getParam } from "../../helpers/store_api";
 
 vi.mock("../../helpers/customer_cart_helper", () => ({
   createCustomerCart: vi.fn(), addCustomerCartItem: vi.fn(), checkoutCustomerCart: vi.fn(),
 }));
 vi.mock("../../helpers/customer_helper", () => ({ getCustomerInfo: () => ({ customerId: "CUSTOMER-1" }) }));
+vi.mock("../../helpers/store_api", () => ({ getParam: vi.fn() }));
 vi.mock("../../helpers/pickup_helper", () => ({
   issueCustomerCollectionToken: vi.fn(), issueCustomerArrivalToken: vi.fn(),
 }));
@@ -53,6 +55,7 @@ describe("customer pickup checkout", () => {
     sessionStorage.clear();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-09T07:00:00Z"));
+    getParam.mockResolvedValue({ data: { value_string: "90" } });
     createCustomerCart.mockResolvedValue({ data: { cartId: "CART-1" } });
     addCustomerCartItem.mockResolvedValue({ data: { quoteId: "QUOTE-1" } });
     checkoutCustomerCart.mockResolvedValue({
@@ -78,6 +81,24 @@ describe("customer pickup checkout", () => {
     expect(screen.getByRole("button", { name: "customer.cart.payOnline" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByLabelText("customer.cart.channel")).not.toBeInTheDocument();
     expect(screen.queryByText("customer.cart.delivery")).not.toBeInTheDocument();
+  });
+
+  it("uses the configured pickup lead time for displayed slots and checkout", async () => {
+    getParam.mockResolvedValue({ data: { value_string: "10" } });
+    renderCart();
+
+    expect(await screen.findByRole("button", { name: /15:30 - 16:00$/ }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/customer\.cart\.pickupRules/)).toHaveTextContent("10");
+    expect(getParam).toHaveBeenCalledWith("pickupLeadTimeMinutes");
+  });
+
+  it("falls back to the default lead time when the configured value is unavailable", async () => {
+    getParam.mockRejectedValue(new Error("Unavailable"));
+    renderCart();
+
+    expect(await screen.findByRole("button", { name: /16:30 - 17:00$/ }))
+      .toHaveAttribute("aria-pressed", "true");
   });
 
   it("always submits mobile order and electronic payment, and does not describe pending payment as success", async () => {
@@ -126,14 +147,21 @@ describe("customer pickup checkout", () => {
     expect(screen.getByRole("alert")).toHaveClass("MuiAlert-standardSuccess");
   });
 
-  it("preserves the basket and surfaces backend policy rejection", async () => {
-    checkoutCustomerCart.mockRejectedValue({ response: { data: { message: "Pickup checkout is unavailable" } } });
+  it("preserves the basket and clears the false started state after a definite backend rejection", async () => {
+    checkoutCustomerCart.mockRejectedValue({
+      response: { status: 422, data: { message: "Pickup checkout is unavailable" } },
+    });
     const user = userEvent.setup();
     const onClear = vi.fn();
     renderCart(onClear, undefined);
     await user.click(screen.getByRole("button", { name: "customer.cart.checkout" }));
     expect(await screen.findByText("Pickup checkout is unavailable")).toBeInTheDocument();
     expect(onClear).not.toHaveBeenCalled();
+    expect(screen.queryByText("customer.cart.retryExisting")).not.toBeInTheDocument();
+    expect(screen.queryByText("customer.cart.recoveredAttempt")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("customer-checkout:CUSTOMER-1")).toBeNull();
+    expect(screen.getByRole("spinbutton")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "customer.cart.checkout" })).toBeEnabled();
     await waitFor(() => expect(screen.getByText("Apple")).toBeInTheDocument());
   });
 
@@ -170,6 +198,7 @@ describe("customer pickup checkout", () => {
     renderCart();
     await user.click(screen.getByRole("button", { name: "customer.cart.checkout" }));
     expect(await screen.findByText("Network interrupted")).toBeInTheDocument();
+    expect(screen.getByText("customer.cart.retryExisting")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "customer.cart.payAtCollection" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "customer.cart.payOnline" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /16:30 - 17:00$/ })).toBeDisabled();
@@ -252,7 +281,7 @@ describe("customer pickup checkout", () => {
     renderCart();
     act(() => vi.setSystemTime(new Date("2026-10-09T07:00:01Z")));
     await user.click(screen.getByRole("button", { name: "customer.cart.checkout" }));
-    expect(await screen.findByText("customer.cart.pickupSlotUnavailable")).toBeInTheDocument();
+    expect(await screen.findByText(/customer\.cart\.pickupSlotUnavailable/)).toBeInTheDocument();
     expect(createCustomerCart).not.toHaveBeenCalled();
   });
 

@@ -18,6 +18,12 @@ export const getStore = (storeId) =>
     skipBackendErrorDialog: true,
   });
 
+export const getParam = (key) =>
+  request("GET", `${API_BASE}/params/${encodeURIComponent(key)}`, null, {
+    skipAuthRedirect: true,
+    skipBackendErrorDialog: true,
+  });
+
 export const createStore = (data) =>
   request("POST", `${API_BASE}/stores`, data, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
